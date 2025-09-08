@@ -25,7 +25,7 @@ class User(AbstractUser):
         full_name = f"{self.first_name} {self.second_name or ''} {self.last_name} {self.second_last_name or ''}".strip()
         return f"{self.username} - {full_name} ({self.role}, {self.gender}, {self.date_of_birth})"
 
-# Agregar modelo invitation
+# Agregar modelo invitation alonso 
 class Invitation(models.Model):
     coach = models.ForeignKey(User, on_delete=models.CASCADE, related_name="invitations")
     code = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
