@@ -24,7 +24,7 @@ class AISuggestion(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
     accepted = models.BooleanField(default=False)
-    accepted_by = models.ForeignKey('authentication.User', on_delete=models.SET_NULL, null=True, blank=True, related_name="accepted_ai_suggestions")
+    accepted_by = models.ForeignKey('authentication.CustomUser', on_delete=models.SET_NULL, null=True, blank=True, related_name="accepted_ai_suggestions")
     accepted_at = models.DateTimeField(null=True, blank=True)
 
     def clean(self):
@@ -52,6 +52,6 @@ class AIAdjustmentLog(models.Model):
     new_rpe = models.FloatField(null=True, blank=True)
 
     applied_by_ai = models.BooleanField(default=True)
-    applied_by = models.ForeignKey('authentication.User', on_delete=models.SET_NULL, null=True, blank=True, related_name="manual_adjustments")
+    applied_by = models.ForeignKey('authentication.CustomUser', on_delete=models.SET_NULL, null=True, blank=True, related_name="manual_adjustments")
     suggestion = models.ForeignKey(AISuggestion, on_delete=models.SET_NULL, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)

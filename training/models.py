@@ -1,18 +1,15 @@
 from django.db import models
 
 from django.db import models
-from authentication.models import User
+from authentication.models import  CustomUser
 
 class CoachAthlete(models.Model):
-    coach = models.ForeignKey(User, on_delete=models.CASCADE, related_name="athletes")
-    athlete = models.ForeignKey(User, on_delete=models.CASCADE, related_name="coaches")
+    coach = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name="athletes")
+    athlete = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name="coaches")
     start_date = models.DateField(auto_now_add=True)
 
     class Meta:
         unique_together = ("coach", "athlete")
-
-    def __str__(self):
-        return f"{self.coach.username} → {self.athlete.username}"
 
 
 class TrainingBlock(models.Model):
@@ -21,8 +18,8 @@ class TrainingBlock(models.Model):
         DUP = "DUP", "DUP"
         BLOQUES = "BLOQUES", "Bloques"
 
-    athlete = models.ForeignKey(User, on_delete=models.CASCADE, related_name="blocks")
-    coach = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
+    athlete = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name="blocks")
+    coach = models.ForeignKey(CustomUser, on_delete=models.SET_NULL, null=True, blank=True)
     name = models.CharField(max_length=100)
     periodization = models.CharField(max_length=20, choices=Periodization.choices, default=Periodization.LINEAL)
     start_date = models.DateField()
@@ -30,8 +27,6 @@ class TrainingBlock(models.Model):
     goal_competition_date = models.DateField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
-    def __str__(self):
-        return f"{self.name} ({self.athlete.username})"
 
 
 class TrainingSession(models.Model):
@@ -54,17 +49,13 @@ class Exercise(models.Model):
     rpe_actual = models.FloatField(null=True, blank=True)
     completed = models.BooleanField(default=False)
 
-    def __str__(self):
-        return f"{self.name} - {self.session.date} - {self.session.block.athlete.username}"
 
 
 class AthleteProgress(models.Model):
-    athlete = models.ForeignKey(User, on_delete=models.CASCADE, related_name="progress")
+    athlete = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name="progress")
     exercise = models.CharField(max_length=100)
     best_weight = models.FloatField()
     estimated_1rm = models.FloatField(null=True, blank=True)
     date = models.DateField(auto_now_add=True)
 
-    def __str__(self):
-        return f"{self.athlete.username} - {self.exercise} {self.best_weight}kg"
 
