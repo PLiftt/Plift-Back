@@ -2,6 +2,7 @@ from django.db import models
 from django.contrib.auth.models import AbstractUser
 import random
 import string
+import uuid
 
 class User(AbstractUser):
     class Role(models.TextChoices):
@@ -15,17 +16,8 @@ class User(AbstractUser):
 
 # Agregar modelo invitation
 class Invitation(models.Model):
-    coach = models.ForeignKey(User, on_delete=models.CASCADE, related_name="sent_invitations", limit_choices_to={'role': 'coach'})
-    athlete = models.ForeignKey(User, on_delete=models.CASCADE, related_name="received_invitations", limit_choices_to={'role': 'athlete'}, null=True, blank=True)
-    code = models.CharField(max_length=10, unique=True)
-    email = models.EmailField(unique=True)
-    created_at = models.DateTimeField(auto_now_add=True)
+    coach = models.ForeignKey(User, on_delete=models.CASCADE, related_name="invitations")
+    code = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
+    athlete = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
     accepted = models.BooleanField(default=False)
-
-    def save(self, *args, **kwargs):
-        if not self.code:
-            self.code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=10))
-        super().save(*args, **kwargs)
-
-    def __str__(self):
-        return f"Invitation from {self.coach.username} to {self.email} - Accepted: {self.accepted}"
+    created_at = models.DateTimeField(auto_now_add=True)
