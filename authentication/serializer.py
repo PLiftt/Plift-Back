@@ -40,3 +40,20 @@ class RegisterSerializer(serializers.ModelSerializer):
             
         )
         return user
+
+class UserSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CustomUser
+        fields = [
+            "id",
+            "email",
+            "first_name",
+            "second_name",
+            "last_name",
+            "second_last_name",
+            "gender",
+            "date_of_birth",
+            "role",
+            "date_joined"
+        ]
+        read_only_fields = ["id", "date_joined"]
