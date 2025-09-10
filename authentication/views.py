@@ -1,6 +1,6 @@
 from rest_framework import generics, viewsets, permissions, status
 from django.contrib.auth import get_user_model
-from .serializer import RegisterSerializer, UserSerializer, InvitationSerializer
+from .serializer import CoachAthleteSerializer, RegisterSerializer, UserSerializer, InvitationSerializer
 from .models import CustomUser, Invitation
 from training.models import CoachAthlete
 from rest_framework.decorators import action
@@ -70,3 +70,8 @@ class InvitationViewSet(viewsets.ModelViewSet):
 
         invitation.delete()
         return Response({"message": "Invitación rechazada"})
+
+class CoachAthleteViewSet(viewsets.ModelViewSet):
+    queryset = CoachAthlete.objects.all()
+    serializer_class = CoachAthleteSerializer
+    # permission_classes = [permissions.IsAuthenticated]
