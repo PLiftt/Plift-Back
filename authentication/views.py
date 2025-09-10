@@ -10,6 +10,14 @@ from rest_framework.views import APIView
 
 User = get_user_model()
 
+class IsAdminOrSelf(permissions.BasePermission):
+    def has_object_permission(self, request, view, obj):
+        # El admin puede ver todo
+        if request.user.is_staff or request.user.is_superuser:
+            return True
+        # El usuario normal solo puede ver su propio perfil
+        return obj == request.user
+
 class RegisterView(generics.CreateAPIView):
     queryset = User.objects.all()
     serializer_class = RegisterSerializer
@@ -17,7 +25,14 @@ class RegisterView(generics.CreateAPIView):
 class UserViewSet(viewsets.ModelViewSet):
     queryset = CustomUser.objects.all()
     serializer_class = UserSerializer
-    # permission_classes = [permissions.IsAuthenticated]
+
+    def get_permissions(self):
+        # Solo admin puede listar todos los usuarios
+        if self.action in ["list", "create", "destroy"]:
+            permission_classes = [permissions.IsAdminUser]
+        else:  # retrieve, update, partial_update → aplica regla personalizada
+            permission_classes = [IsAdminOrSelf]
+        return [permission() for permission in permission_classes]
 
 class InvitationViewSet(viewsets.ModelViewSet):
     queryset = Invitation.objects.all()
