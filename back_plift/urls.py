@@ -2,13 +2,15 @@ from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from authentication.views import RegisterView, UserViewSet
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView 
-from authentication.views import InvitationViewSet
+from authentication.views import InvitationViewSet, CoachAthleteViewSet
 from authentication.serializer import ProfileView
+
 
 # Router para los ViewSets
 router = DefaultRouter()
 router.register(r'users', UserViewSet, basename='user')
 router.register(r'invitations', InvitationViewSet, basename='invitation')
+router.register(r'coachathletes', CoachAthleteViewSet, basename='coachathlete')
 
 urlpatterns = [
     path("register/", RegisterView.as_view(), name="register"),
