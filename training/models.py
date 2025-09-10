@@ -3,10 +3,12 @@ from django.db import models
 from django.db import models
 from authentication.models import  CustomUser
 
+# Usar tabla intermedia para la relación muchos a muchos entre coaches y atletas
 class CoachAthlete(models.Model):
     coach = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name="athletes")
     athlete = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name="coaches")
     start_date = models.DateField(auto_now_add=True)
+    end_date = models.DateField(null=True, blank=True)
 
     class Meta:
         unique_together = ("coach", "athlete")
