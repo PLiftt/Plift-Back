@@ -60,10 +60,6 @@ class UserSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ["id", "date_joined"]
 
-class ProfileView(generics.RetrieveAPIView):
-    serializer_class = UserSerializer
-    permission_classes = [permissions.IsAuthenticated]
-
 class InvitationSerializer(serializers.ModelSerializer):
     coach_email = serializers.EmailField(source='coach.email', read_only=True)
     athlete_email = serializers.EmailField(source='athlete.email', read_only=True)
