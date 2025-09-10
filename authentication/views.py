@@ -6,6 +6,7 @@ from training.models import CoachAthlete
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.exceptions import PermissionDenied
+from rest_framework.views import APIView
 
 User = get_user_model()
 
@@ -23,6 +24,7 @@ class InvitationViewSet(viewsets.ModelViewSet):
     serializer_class = InvitationSerializer
     permission_classes = [permissions.IsAuthenticated]
 
+    # GenerateInvitationView
     def perform_create(self, serializer):
         if self.request.user.role != CustomUser.Role.COACH:
             raise PermissionDenied("Solo los coaches pueden crear invitaciones.")
@@ -33,7 +35,7 @@ class InvitationViewSet(viewsets.ModelViewSet):
             raise serializer.ValidationError({"athlete_email": "Atleta no encontrado"})
         serializer.save(coach=self.request.user, athlete=athlete)
 
-        
+    # JoinAthleteView   
     @action(detail=False, methods=["post"])
     def accept(self, request):
         code = request.data.get("code")
@@ -74,4 +76,24 @@ class InvitationViewSet(viewsets.ModelViewSet):
 class CoachAthleteViewSet(viewsets.ModelViewSet):
     queryset = CoachAthlete.objects.all()
     serializer_class = CoachAthleteSerializer
-    # permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated]
+
+class ProfileView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        user = request.user
+        data = UserSerializer(user).data  
+
+        if user.role == CustomUser.Role.COACH:
+            athletes = CoachAthlete.objects.filter(coach=user)
+            data["athletes"] = CoachAthleteSerializer(athletes, many=True).data
+
+        elif user.role == CustomUser.Role.ATHLETE:
+            coach_relation = CoachAthlete.objects.filter(athlete=user).first()
+            data["coach"] = (
+                CoachAthleteSerializer(coach_relation).data
+                if coach_relation else None
+            )
+
+        return Response(data)
