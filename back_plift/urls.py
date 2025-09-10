@@ -2,9 +2,7 @@ from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from authentication.views import RegisterView, UserViewSet
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView 
-from authentication.views import InvitationViewSet, CoachAthleteViewSet
-from authentication.serializer import ProfileView
-
+from authentication.views import InvitationViewSet, CoachAthleteViewSet, ProfileView
 
 # Router para los ViewSets
 router = DefaultRouter()
