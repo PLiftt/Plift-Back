@@ -1,14 +1,11 @@
-from rest_framework import generics
+from rest_framework import generics, viewsets, permissions, status
 from django.contrib.auth import get_user_model
-from .serializer import RegisterSerializer, UserSerializer
-from rest_framework import viewsets, permissions
+from .serializer import RegisterSerializer, UserSerializer, InvitationSerializer
 from .models import CustomUser, Invitation
-from .serializer import InvitationSerializer
+from training.models import CoachAthlete
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from rest_framework import status
 from rest_framework.exceptions import PermissionDenied
-
 
 User = get_user_model()
 
@@ -43,10 +40,21 @@ class InvitationViewSet(viewsets.ModelViewSet):
         try:
             invitation = Invitation.objects.get(code=code, accepted=False, athlete=request.user)
         except Invitation.DoesNotExist:
-            return Response({"error": "Invitación no válida o no eres el atleta invitado"}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"error": "Invitación no válida o no eres el atleta invitado"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
+        # Marcar invitación como aceptada
         invitation.accepted = True
         invitation.save()
+
+        # Crear la relación CoachAthlete si no existe
+        CoachAthlete.objects.get_or_create(
+            coach=invitation.coach,
+            athlete=invitation.athlete
+        )
+
         return Response(InvitationSerializer(invitation).data)
     
     @action(detail=False, methods=["post"])
@@ -55,7 +63,10 @@ class InvitationViewSet(viewsets.ModelViewSet):
         try:
             invitation = Invitation.objects.get(code=code, accepted=False, athlete=request.user)
         except Invitation.DoesNotExist:
-            return Response({"error": "Invitación no válida o no eres el atleta invitado"}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"error": "Invitación no válida o no eres el atleta invitado"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
         invitation.delete()
         return Response({"message": "Invitación rechazada"})
