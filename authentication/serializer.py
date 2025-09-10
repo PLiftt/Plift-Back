@@ -1,5 +1,6 @@
-from rest_framework import serializers
+from rest_framework import serializers, permissions, generics
 from .models import CustomUser
+from .models import Invitation
 
 class RegisterSerializer(serializers.ModelSerializer):
     password2 = serializers.CharField(write_only=True)
@@ -57,3 +58,16 @@ class UserSerializer(serializers.ModelSerializer):
             "date_joined"
         ]
         read_only_fields = ["id", "date_joined"]
+
+class ProfileView(generics.RetrieveAPIView):
+    serializer_class = UserSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+class InvitationSerializer(serializers.ModelSerializer):
+    coach_email = serializers.EmailField(source='coach.email', read_only=True)
+    athlete_email = serializers.EmailField(source='athlete.email', read_only=True)
+
+    class Meta:
+        model = Invitation
+        fields = ['id', 'code', 'coach_email', 'athlete_email', 'accepted', 'created_at']
+        read_only_fields = ['id', 'code', 'coach_email', 'athlete_email', 'created_at']
