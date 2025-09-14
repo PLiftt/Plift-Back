@@ -21,6 +21,7 @@ class IsAdminOrSelf(permissions.BasePermission):
 class RegisterView(generics.CreateAPIView):
     queryset = User.objects.all()
     serializer_class = RegisterSerializer
+    permission_classes = [permissions.AllowAny] 
 
 class UserViewSet(viewsets.ModelViewSet):
     queryset = CustomUser.objects.all()
