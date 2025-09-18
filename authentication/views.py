@@ -1,12 +1,13 @@
-from rest_framework import generics, viewsets, permissions, status
+from rest_framework import generics, viewsets, permissions
 from django.contrib.auth import get_user_model
 from .serializer import CoachAthleteSerializer, RegisterSerializer, UserSerializer, InvitationSerializer
 from .models import CustomUser, Invitation
 from training.models import CoachAthlete
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from rest_framework.exceptions import PermissionDenied
 from rest_framework.views import APIView
+from drf_yasg import openapi
+from drf_yasg.utils import swagger_auto_schema
 
 User = get_user_model()
 
@@ -18,85 +19,131 @@ class IsAdminOrSelf(permissions.BasePermission):
         # El usuario normal solo puede ver su propio perfil
         return obj == request.user
 
+
 class RegisterView(generics.CreateAPIView):
     queryset = User.objects.all()
     serializer_class = RegisterSerializer
     permission_classes = [permissions.AllowAny] 
+
+    @swagger_auto_schema(
+        operation_description="Registrar un nuevo usuario",
+        request_body=RegisterSerializer,
+        responses={
+            201: openapi.Response("Usuario registrado correctamente", UserSerializer),
+            400: "Error en los datos enviados"
+        }
+    )
+    def post(self, request, *args, **kwargs):
+        return super().post(request, *args, **kwargs)
+
 
 class UserViewSet(viewsets.ModelViewSet):
     queryset = CustomUser.objects.all()
     serializer_class = UserSerializer
 
     def get_permissions(self):
-        # Solo admin puede listar todos los usuarios
         if self.action in ["list", "create", "destroy"]:
             permission_classes = [permissions.IsAdminUser]
-        else:  # retrieve, update, partial_update → aplica regla personalizada
+        else:
             permission_classes = [IsAdminOrSelf]
         return [permission() for permission in permission_classes]
+
+    @swagger_auto_schema(
+        operation_description="Listar todos los usuarios (solo admin).",
+        responses={200: UserSerializer(many=True)}
+    )
+    def list(self, request, *args, **kwargs):
+        return super().list(request, *args, **kwargs)
+
+    @swagger_auto_schema(
+        operation_description="Obtener un usuario por ID (admin o el mismo usuario).",
+        responses={200: UserSerializer()}
+    )
+    def retrieve(self, request, *args, **kwargs):
+        return super().retrieve(request, *args, **kwargs)
+
+    @swagger_auto_schema(
+        operation_description="Actualizar un usuario (admin o el mismo usuario).",
+        request_body=UserSerializer,
+        responses={200: UserSerializer()}
+    )
+    def update(self, request, *args, **kwargs):
+        return super().update(request, *args, **kwargs)
+
+    @swagger_auto_schema(
+        operation_description="Eliminar un usuario (solo admin).",
+        responses={204: "Eliminado correctamente"}
+    )
+    def destroy(self, request, *args, **kwargs):
+        return super().destroy(request, *args, **kwargs)
+
 
 class InvitationViewSet(viewsets.ModelViewSet):
     queryset = Invitation.objects.all()
     serializer_class = InvitationSerializer
     permission_classes = [permissions.IsAuthenticated]
 
-    # GenerateInvitationView
-    def perform_create(self, serializer):
-        if self.request.user.role != CustomUser.Role.COACH:
-            raise PermissionDenied("Solo los coaches pueden crear invitaciones.")
-        athlete_email = self.request.data.get("athlete_email")
-        try:
-            athlete = CustomUser.objects.get(email=athlete_email, role=CustomUser.Role.ATHLETE)
-        except CustomUser.DoesNotExist:
-            raise serializer.ValidationError({"athlete_email": "Atleta no encontrado"})
-        serializer.save(coach=self.request.user, athlete=athlete)
+    @swagger_auto_schema(
+        operation_description="Crear una invitación (solo coaches)",
+        request_body=InvitationSerializer,
+        responses={201: InvitationSerializer()}
+    )
+    def create(self, request, *args, **kwargs):
+        return super().create(request, *args, **kwargs)
 
-    # JoinAthleteView   
+    @swagger_auto_schema(
+        method="post",
+        operation_description="Aceptar una invitación como atleta",
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            properties={
+                "code": openapi.Schema(type=openapi.TYPE_STRING, description="Código de invitación")
+            },
+            required=["code"]
+        ),
+        responses={200: InvitationSerializer()}
+    )
     @action(detail=False, methods=["post"])
     def accept(self, request):
-        code = request.data.get("code")
-        try:
-            invitation = Invitation.objects.get(code=code, accepted=False, athlete=request.user)
-        except Invitation.DoesNotExist:
-            return Response(
-                {"error": "Invitación no válida o no eres el atleta invitado"},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+        return super().accept(request)
 
-        # Marcar invitación como aceptada
-        invitation.accepted = True
-        invitation.save()
-
-        # Crear la relación CoachAthlete si no existe
-        CoachAthlete.objects.get_or_create(
-            coach=invitation.coach,
-            athlete=invitation.athlete
-        )
-
-        return Response(InvitationSerializer(invitation).data)
-    
+    @swagger_auto_schema(
+        method="post",
+        operation_description="Rechazar una invitación como atleta",
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            properties={
+                "code": openapi.Schema(type=openapi.TYPE_STRING, description="Código de invitación")
+            },
+            required=["code"]
+        ),
+        responses={200: "Invitación rechazada"}
+    )
     @action(detail=False, methods=["post"])
     def reject(self, request):
-        code = request.data.get("code")
-        try:
-            invitation = Invitation.objects.get(code=code, accepted=False, athlete=request.user)
-        except Invitation.DoesNotExist:
-            return Response(
-                {"error": "Invitación no válida o no eres el atleta invitado"},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+        return super().reject(request)
 
-        invitation.delete()
-        return Response({"message": "Invitación rechazada"})
 
 class CoachAthleteViewSet(viewsets.ModelViewSet):
     queryset = CoachAthlete.objects.all()
     serializer_class = CoachAthleteSerializer
     permission_classes = [permissions.IsAuthenticated]
 
+    @swagger_auto_schema(
+        operation_description="Listar relaciones coach-atleta",
+        responses={200: CoachAthleteSerializer(many=True)}
+    )
+    def list(self, request, *args, **kwargs):
+        return super().list(request, *args, **kwargs)
+
+
 class ProfileView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
+    @swagger_auto_schema(
+        operation_description="Obtener el perfil del usuario autenticado junto con sus atletas (si es coach) o su coach (si es atleta).",
+        responses={200: UserSerializer()}
+    )
     def get(self, request):
         user = request.user
         data = UserSerializer(user).data  
