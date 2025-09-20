@@ -83,45 +83,48 @@ class InvitationViewSet(viewsets.ModelViewSet):
     serializer_class = InvitationSerializer
     permission_classes = [permissions.IsAuthenticated]
 
-    @swagger_auto_schema(
-        operation_description="Crear una invitación (solo coaches)",
-        request_body=InvitationSerializer,
-        responses={201: InvitationSerializer()}
-    )
-    def create(self, request, *args, **kwargs):
-        return super().create(request, *args, **kwargs)
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context.update({"request": self.request})
+        return context
 
-    @swagger_auto_schema(
-        method="post",
-        operation_description="Aceptar una invitación como atleta",
-        request_body=openapi.Schema(
-            type=openapi.TYPE_OBJECT,
-            properties={
-                "code": openapi.Schema(type=openapi.TYPE_STRING, description="Código de invitación")
-            },
-            required=["code"]
-        ),
-        responses={200: InvitationSerializer()}
-    )
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        invitation = serializer.save()
+        out_serializer = self.get_serializer(invitation)
+        return Response(out_serializer.data, status=201)
+
     @action(detail=False, methods=["post"])
     def accept(self, request):
-        return super().accept(request)
+        code = request.data.get("code")
+        if not code:
+            return Response({"code": "Se requiere el código de invitación."}, status=400)
 
-    @swagger_auto_schema(
-        method="post",
-        operation_description="Rechazar una invitación como atleta",
-        request_body=openapi.Schema(
-            type=openapi.TYPE_OBJECT,
-            properties={
-                "code": openapi.Schema(type=openapi.TYPE_STRING, description="Código de invitación")
-            },
-            required=["code"]
-        ),
-        responses={200: "Invitación rechazada"}
-    )
-    @action(detail=False, methods=["post"])
-    def reject(self, request):
-        return super().reject(request)
+        try:
+            invitation = Invitation.objects.get(code=code)
+        except Invitation.DoesNotExist:
+            return Response({"code": "Código inválido."}, status=404)
+
+        if invitation.accepted:
+            return Response({"detail": "Invitación ya aceptada."}, status=400)
+
+        if invitation.athlete is None:
+            invitation.athlete = request.user
+
+        elif invitation.athlete != request.user:
+            return Response({"detail": "No autorizado para aceptar esta invitación."}, status=403)
+
+        invitation.accepted = True
+        invitation.save()
+
+        CoachAthlete.objects.get_or_create(
+            coach=invitation.coach,
+            athlete=invitation.athlete
+        )
+
+        serializer = self.get_serializer(invitation)
+        return Response(serializer.data, status=200)
 
 
 class CoachAthleteViewSet(viewsets.ModelViewSet):
