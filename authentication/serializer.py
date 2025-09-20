@@ -64,10 +64,51 @@ class InvitationSerializer(serializers.ModelSerializer):
     coach_email = serializers.EmailField(source='coach.email', read_only=True)
     athlete_email = serializers.EmailField(source='athlete.email', read_only=True)
 
+    # Campo de entrada opcional
+    athlete = serializers.EmailField(write_only=True, required=False, allow_blank=True)
+
     class Meta:
         model = Invitation
-        fields = ['id', 'code', 'coach_email', 'athlete_email', 'accepted', 'created_at']
-        read_only_fields = ['id', 'code', 'coach_email', 'athlete_email', 'created_at']
+        fields = [
+            'id',
+            'code',
+            'coach_email',
+            'athlete_email',
+            'athlete',   
+            'accepted',
+            'created_at',
+        ]
+        read_only_fields = [
+            'id',
+            'code',
+            'coach_email',
+            'athlete_email',
+            'created_at',
+        ]
+
+    def create(self, validated_data):
+        coach = self.context["request"].user
+
+        if coach.role != CustomUser.Role.COACH:
+            raise serializers.ValidationError({"coach": "Solo los coaches pueden generar códigos."})
+
+        athlete_email = validated_data.pop("athlete", None)
+        athlete = None
+        if athlete_email:
+            athlete_email = athlete_email.strip()
+            if athlete_email:
+                try:
+                    athlete = CustomUser.objects.get(email=athlete_email, role=CustomUser.Role.ATHLETE)
+                except CustomUser.DoesNotExist:
+                    raise serializers.ValidationError({"athlete": "No existe un atleta con ese email."})
+
+        return Invitation.objects.create(
+            coach=coach,
+            athlete=athlete,
+            **validated_data
+        )
+
+
 
 class CoachAthleteSerializer(serializers.ModelSerializer):
     coach_email = serializers.CharField(source='coach.email', read_only=True)
