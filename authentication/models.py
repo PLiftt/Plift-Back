@@ -57,6 +57,9 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
     gender = models.CharField(max_length=10, choices=Gender.choices, blank=True, null=True, verbose_name="Género")
     date_of_birth = models.DateField(blank=True, null=True, verbose_name="Fecha de nacimiento")
     bodyweight_kg = models.FloatField(null=True, blank=True, verbose_name="Peso corporal (kg)")
+    squat_1rm = models.FloatField(null=True, blank=True, verbose_name="1RM inicial Squat")
+    bench_1rm = models.FloatField(null=True, blank=True, verbose_name="1RM inicial Bench")
+    deadlift_1rm = models.FloatField(null=True, blank=True, verbose_name="1RM inicial Deadlift")
     
     role = models.CharField(
         max_length=10,
