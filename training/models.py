@@ -55,9 +55,11 @@ class Exercise(models.Model):
 
 class AthleteProgress(models.Model):
     athlete = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name="progress")
-    exercise = models.CharField(max_length=100)
-    best_weight = models.FloatField()
-    estimated_1rm = models.FloatField(null=True, blank=True)
+    exercise = models.CharField(max_length=100) 
+    best_weight = models.FloatField()  
+    estimated_1rm = models.FloatField(null=True, blank=True) 
     date = models.DateField(auto_now_add=True)
 
+    def __str__(self):
+        return f"{self.athlete.email} - {self.exercise}: {self.best_weight}kg"
 
