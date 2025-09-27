@@ -56,6 +56,7 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
     second_last_name = models.CharField(max_length=150, blank=True, null=True, verbose_name="Segundo apellido")
     gender = models.CharField(max_length=10, choices=Gender.choices, blank=True, null=True, verbose_name="Género")
     date_of_birth = models.DateField(blank=True, null=True, verbose_name="Fecha de nacimiento")
+    bodyweight_kg = models.FloatField(null=True, blank=True, verbose_name="Peso corporal (kg)")
     
     role = models.CharField(
         max_length=10,
