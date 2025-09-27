@@ -18,7 +18,11 @@ class RegisterSerializer(serializers.ModelSerializer):
             "second_last_name",
             "gender",
             "date_of_birth",
-            "role"
+            "role",
+            "bodyweight_kg",
+            "squat_1rm",
+            "bench_1rm",
+            "deadlift_1rm"
         ]
         extra_kwargs = {"password": {"write_only": True}}
 
