@@ -1,6 +1,6 @@
 from rest_framework import generics, viewsets, permissions
 from django.contrib.auth import get_user_model
-from .serializer import CoachAthleteSerializer, RegisterSerializer, UserSerializer, InvitationSerializer
+from .serializer import CoachAthleteSerializer, RegisterSerializer, UserSerializer, InvitationSerializer, UserUpdateSerializer
 from .models import CustomUser, Invitation
 from training.models import CoachAthlete
 from rest_framework.decorators import action
@@ -36,6 +36,12 @@ class RegisterView(generics.CreateAPIView):
     def post(self, request, *args, **kwargs):
         return super().post(request, *args, **kwargs)
 
+class UpdateProfileView(generics.UpdateAPIView):
+    serializer_class = UserUpdateSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_object(self):
+        return self.request.user
 
 class UserViewSet(viewsets.ModelViewSet):
     queryset = CustomUser.objects.all()
