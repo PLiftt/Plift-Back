@@ -1,4 +1,4 @@
-from rest_framework import generics, viewsets, permissions
+from rest_framework import generics, viewsets, permissions, status
 from django.contrib.auth import get_user_model
 from .serializer import CoachAthleteSerializer, RegisterSerializer, UserSerializer, InvitationSerializer, UserUpdateSerializer
 from .models import CustomUser, Invitation
@@ -8,6 +8,11 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from drf_yasg import openapi
 from drf_yasg.utils import swagger_auto_schema
+from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
+from django.utils.encoding import force_bytes
+from django.contrib.auth.tokens import default_token_generator
+from django.core.mail import send_mail
+from django.conf import settings
 
 User = get_user_model()
 
@@ -169,3 +174,28 @@ class ProfileView(APIView):
             )
 
         return Response(data)
+
+class EmailTestView(APIView):
+    """
+    Envía un correo de prueba y muestra cualquier error en la respuesta.
+    """
+    permission_classes = []
+
+    def post(self, request):
+        email = request.data.get("email")
+        if not email:
+            return Response({"error": "Debes enviar un email"}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            for i in range(10):
+                send_mail(
+                    subject=f"Correo de prueba #{i+1}",
+                    message=f"Este es el correo de prueba número {i+1} WENA GERMAN",
+                    from_email=settings.DEFAULT_FROM_EMAIL,
+                    recipient_list=[email],
+                    fail_silently=False,
+                )
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        return Response({"message": "Correo enviado 10 veces correctamente"}, status=status.HTTP_200_OK)
