@@ -6,6 +6,7 @@ from authentication.urls import urlpatterns as auth_urls
 from rest_framework import permissions
 from drf_yasg.views import get_schema_view
 from drf_yasg import openapi
+from training.urls import router as training_router
 
 
 schema_view = get_schema_view(
@@ -25,6 +26,7 @@ schema_view = get_schema_view(
 # Router para los ViewSets
 router = DefaultRouter()
 router.registry.extend(auth_router.registry)
+router.registry.extend(training_router.registry)
 
 urlpatterns = [
     path("token/", TokenObtainPairView.as_view(), name="token_obtain_pair"),
