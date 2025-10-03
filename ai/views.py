@@ -15,14 +15,14 @@ openai.api_key = settings.OPENAI_API_KEY
 @permission_classes([IsAuthenticated])
 def athlete_feedback(request):
     """
-    El atleta responde feedback diario y se ajusta la última sesión automáticamente.
+    El atleta responde feedback diario y se ajusta la última sesión automáticamente,
+    solo modificando los ejercicios existentes.
     """
     serializer = AthleteFeedbackSerializer(data=request.data)
     if serializer.is_valid():
+
         session = TrainingSession.objects.filter(block__athlete=request.user).order_by("-date").first()
-
         feedback = serializer.save(athlete=request.user, session=session)
-
         progress = AthleteProgress.objects.filter(athlete=request.user).order_by("-date")[:3]
         
         context = f"""
@@ -65,6 +65,7 @@ Devuelve un JSON con este formato para los ejercicios de powerlifting:
             modified = []
 
             if session:
+                # Mapear nombres del JSON a nombres existentes en la DB
                 name_map = {
                     "Squat": "Sentadilla",
                     "Bench": "Bench Press",
@@ -74,18 +75,7 @@ Devuelve un JSON con este formato para los ejercicios de powerlifting:
                 for ai_name, db_name in name_map.items():
                     if ai_name in adjustments:
                         ex = session.exercises.filter(name=db_name).first()
-                        if not ex:
-                            # Crear el ejercicio si no existe
-                            ex = Exercise.objects.create(
-                                session=session,
-                                name=db_name,
-                                sets=adjustments[ai_name]["sets"],
-                                reps=adjustments[ai_name]["reps"],
-                                weight=adjustments[ai_name]["weight"]
-                            )
-                            modified.append(db_name)
-                        else:
-                            # Modificar ejercicio existente
+                        if ex:
                             ex.sets = adjustments[ai_name]["sets"]
                             ex.reps = adjustments[ai_name]["reps"]
                             ex.weight = adjustments[ai_name]["weight"]
