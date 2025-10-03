@@ -2,30 +2,28 @@ from rest_framework import viewsets, permissions
 from rest_framework.exceptions import PermissionDenied
 from .models import TrainingBlock, TrainingSession, Exercise, AthleteProgress
 from .serializers import TrainingBlockSerializer, TrainingSessionSerializer, ExerciseSerializer, AthleteProgressSerializer
+from django_filters.rest_framework import DjangoFilterBackend
 
 
 class TrainingBlockViewSet(viewsets.ModelViewSet):
     queryset = TrainingBlock.objects.all()
     serializer_class = TrainingBlockSerializer
     permission_classes = [permissions.IsAuthenticated]
+    filter_backends = [DjangoFilterBackend]
+    filterset_fields = ["athlete", "coach"]  # ahora permite ?athlete=<id> o ?coach=<id>
 
     def perform_create(self, serializer):
-        # 🚨 Solo los coaches pueden crear bloques
         if self.request.user.role != "coach":
             raise PermissionDenied("Solo los coaches pueden crear bloques")
-
-        # Asignar automáticamente al coach que lo creó
         serializer.save(coach=self.request.user)
 
     def get_queryset(self):
         user = self.request.user
 
         if user.role == "coach":
-            # Coach solo ve los bloques que él mismo creó
             return TrainingBlock.objects.filter(coach=user)
 
         if user.role == "athlete":
-            # Atleta solo ve sus propios bloques
             return TrainingBlock.objects.filter(athlete=user)
 
         if user.role == "admin":
@@ -38,22 +36,21 @@ class TrainingSessionViewSet(viewsets.ModelViewSet):
     queryset = TrainingSession.objects.all()
     serializer_class = TrainingSessionSerializer
     permission_classes = [permissions.IsAuthenticated]
+    filter_backends = [DjangoFilterBackend]
+    filterset_fields = ["block"]  # ahora permite ?block=<id>
 
     def perform_create(self, serializer):
         if self.request.user.role != "coach":
             raise PermissionDenied("Solo los coaches pueden crear sesiones")
-
         serializer.save()
 
     def get_queryset(self):
         user = self.request.user
 
         if user.role == "coach":
-            # Coach ve sesiones de sus bloques
             return TrainingSession.objects.filter(block__coach=user)
 
         if user.role == "athlete":
-            # Atleta ve sesiones de sus bloques
             return TrainingSession.objects.filter(block__athlete=user)
 
         if user.role == "admin":
@@ -66,11 +63,12 @@ class ExerciseViewSet(viewsets.ModelViewSet):
     queryset = Exercise.objects.all()
     serializer_class = ExerciseSerializer
     permission_classes = [permissions.IsAuthenticated]
+    filter_backends = [DjangoFilterBackend]
+    filterset_fields = ["session"]  # ahora permite ?session=<id>
 
     def perform_create(self, serializer):
         if self.request.user.role != "coach":
             raise PermissionDenied("Solo los coaches pueden crear ejercicios")
-
         serializer.save()
 
     def get_queryset(self):
