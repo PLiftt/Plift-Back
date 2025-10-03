@@ -19,12 +19,12 @@ class ExerciseSerializer(serializers.ModelSerializer):
         write_only=True,
         required=False
     )
-    # Campo opcional para nombre personalizado
     custom_name = serializers.CharField(
         max_length=30,
         required=False,
         write_only=True
     )
+    name = serializers.CharField(read_only=True)
 
     class Meta:
         model = Exercise
@@ -34,7 +34,6 @@ class ExerciseSerializer(serializers.ModelSerializer):
         predefined = data.get("predefined_name")
         custom = data.get("custom_name")
 
-        # Validar que haya un nombre
         if predefined == "Otro" and not custom:
             raise serializers.ValidationError("Debe especificar el nombre si selecciona 'Otro'.")
         if predefined and predefined != "Otro":
@@ -45,6 +44,14 @@ class ExerciseSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("Debe seleccionar un ejercicio o escribir uno.")
 
         return data
+
+    def create(self, validated_data):
+        # Quitar los campos que no existen en el modelo
+        validated_data.pop("predefined_name", None)
+        validated_data.pop("custom_name", None)
+        return super().create(validated_data)
+
+
     
 class TrainingSessionSerializer(serializers.ModelSerializer):
     exercises = ExerciseSerializer(many=True, read_only=True)
