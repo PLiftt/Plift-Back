@@ -29,6 +29,9 @@ class TrainingBlock(models.Model):
     goal_competition_date = models.DateField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
+    def perform_create(self, serializer):
+        serializer.save(created_by=self.request.user)
+
 
 
 class TrainingSession(models.Model):

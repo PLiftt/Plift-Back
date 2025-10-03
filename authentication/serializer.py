@@ -46,6 +46,20 @@ class RegisterSerializer(serializers.ModelSerializer):
             
         )
         return user
+    
+class UserUpdateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CustomUser
+        fields = [
+            "first_name",
+            "second_name",
+            "last_name",
+            "second_last_name",
+            "bodyweight_kg",
+            "squat_1rm",
+            "bench_1rm",
+            "deadlift_1rm",
+        ]
 
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
@@ -60,7 +74,11 @@ class UserSerializer(serializers.ModelSerializer):
             "gender",
             "date_of_birth",
             "role",
-            "date_joined"
+            "date_joined",
+            "bodyweight_kg",
+            "squat_1rm",
+            "bench_1rm",
+            "deadlift_1rm",
         ]
         read_only_fields = ["id", "date_joined"]
 

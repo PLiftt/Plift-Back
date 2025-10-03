@@ -1,6 +1,6 @@
-from rest_framework import generics, viewsets, permissions
+from rest_framework import generics, viewsets, permissions, status
 from django.contrib.auth import get_user_model
-from .serializer import CoachAthleteSerializer, RegisterSerializer, UserSerializer, InvitationSerializer
+from .serializer import CoachAthleteSerializer, RegisterSerializer, UserSerializer, InvitationSerializer, UserUpdateSerializer
 from .models import CustomUser, Invitation
 from training.models import CoachAthlete
 from rest_framework.decorators import action
@@ -8,6 +8,12 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from drf_yasg import openapi
 from drf_yasg.utils import swagger_auto_schema
+from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
+from django.utils.encoding import force_bytes
+from django.contrib.auth.tokens import default_token_generator
+from django.core.mail import send_mail
+from django.conf import settings
+import random
 
 User = get_user_model()
 
@@ -36,6 +42,12 @@ class RegisterView(generics.CreateAPIView):
     def post(self, request, *args, **kwargs):
         return super().post(request, *args, **kwargs)
 
+class UpdateProfileView(generics.UpdateAPIView):
+    serializer_class = UserUpdateSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_object(self):
+        return self.request.user
 
 class UserViewSet(viewsets.ModelViewSet):
     queryset = CustomUser.objects.all()
@@ -163,3 +175,60 @@ class ProfileView(APIView):
             )
 
         return Response(data)
+
+    
+class ResetPasswordRequestView(APIView):
+    permission_classes = []
+
+    def post(self, request):
+        email = request.data.get("email")
+        if not email:
+            return Response({"error": "Debes enviar un email"}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            user = CustomUser.objects.get(email=email)
+        except CustomUser.DoesNotExist:
+            return Response({"error": "Usuario no encontrado"}, status=status.HTTP_404_NOT_FOUND)
+
+        # Generar código de 6 dígitos
+        code = f"{random.randint(100000, 999999)}"
+
+        # Guardar temporalmente en el user (puedes agregar campo reset_code y reset_code_expiry)
+        user.reset_code = code
+        from django.utils import timezone
+        user.reset_code_expiry = timezone.now() + timezone.timedelta(minutes=15)
+        user.save()
+
+        # Enviar correo
+        send_mail(
+            subject="Código para cambiar contraseña - Plift",
+            message=f"Hola {user.first_name}, tu código para restablecer la contraseña es: {code}\n\nEl código expira en 15 minutos.",
+            from_email="tucorreo@gmail.com",
+            recipient_list=[email],
+            fail_silently=False,
+        )
+        return Response({"message": f"Código enviado a {email}"}, status=status.HTTP_200_OK)
+    
+class ResetPasswordConfirmView(APIView):
+    permission_classes = []
+
+    def post(self, request):
+        email = request.data.get("email")
+        code = request.data.get("code")
+        new_password = request.data.get("new_password")
+
+        if not email or not code or not new_password:
+            return Response({"error": "Faltan datos"}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            user = CustomUser.objects.get(email=email, reset_code=code)
+        except CustomUser.DoesNotExist:
+            return Response({"error": "Código inválido"}, status=status.HTTP_400_BAD_REQUEST)
+
+        from django.utils import timezone
+        if timezone.now() > user.reset_code_expiry:
+            return Response({"error": "El código expiró"}, status=status.HTTP_400_BAD_REQUEST)
+
+        user.set_password(new_password)
+        user.reset_code = ""
+        user.save()
+        return Response({"message": "Contraseña actualizada con éxito"}, status=status.HTTP_200_OK)

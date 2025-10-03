@@ -60,6 +60,8 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
     squat_1rm = models.FloatField(null=True, blank=True, verbose_name="1RM inicial Squat")
     bench_1rm = models.FloatField(null=True, blank=True, verbose_name="1RM inicial Bench")
     deadlift_1rm = models.FloatField(null=True, blank=True, verbose_name="1RM inicial Deadlift")
+    reset_code = models.CharField(max_length=6, blank=True, null=True, verbose_name="Codigo de recuperación")
+    reset_code_expiry = models.DateTimeField(blank=True, null=True, verbose_name="Codigo expirado")
     
     role = models.CharField(
         max_length=10,

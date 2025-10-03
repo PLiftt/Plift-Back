@@ -5,7 +5,7 @@ Back de proyecto Plift
 ## Requisitos
 
 - PostgreSQL
-- Django 4.1.7
+- Django 4.2.7
 - Python 3.10.0
 
 ## Pasos
