@@ -6,6 +6,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework import status
 from training.models import AthleteProgress, TrainingSession, Exercise
+from .models import ExerciseAdjustment
 from .serializer import AthleteFeedbackSerializer
 from django.conf import settings
 
@@ -16,7 +17,7 @@ openai.api_key = settings.OPENAI_API_KEY
 def athlete_feedback(request):
     """
     El atleta responde feedback diario y se ajusta la última sesión automáticamente,
-    solo modificando los ejercicios existentes.
+    solo modificando los ejercicios existentes y registrando la razón del cambio.
     """
     serializer = AthleteFeedbackSerializer(data=request.data)
     if serializer.is_valid():
@@ -39,9 +40,9 @@ Feedback diario:
 
 Devuelve un JSON con este formato para los ejercicios de powerlifting:
 {{
-    "Squat": {{"sets": int, "reps": int, "weight": float}},
-    "Bench": {{"sets": int, "reps": int, "weight": float}},
-    "Deadlift": {{"sets": int, "reps": int, "weight": float}}
+    "Squat": {{"sets": int, "reps": int, "weight": float, "reason": "motivo del ajuste"}},
+    "Bench": {{"sets": int, "reps": int, "weight": float, "reason": "motivo del ajuste"}},
+    "Deadlift": {{"sets": int, "reps": int, "weight": float, "reason": "motivo del ajuste"}}
 }}
 """
 
@@ -49,10 +50,10 @@ Devuelve un JSON con este formato para los ejercicios de powerlifting:
             completion = openai.chat.completions.create(
                 model="gpt-3.5-turbo",
                 messages=[
-                    {"role": "system", "content": "Eres un coach de powerlifting que solo responde con JSON con ajustes de los ejercicios."},
+                    {"role": "system", "content": "Eres un coach de powerlifting que solo responde con JSON con ajustes de los ejercicios y un motivo."},
                     {"role": "user", "content": context}
                 ],
-                max_tokens=300,
+                max_tokens=400,
                 temperature=0.5
             )
             ai_reply = completion.choices[0].message.content
@@ -80,7 +81,20 @@ Devuelve un JSON con este formato para los ejercicios de powerlifting:
                             ex.reps = adjustments[ai_name]["reps"]
                             ex.weight = adjustments[ai_name]["weight"]
                             ex.save()
-                            modified.append(db_name)
+
+                            # Guardar el ajuste con motivo
+                            ExerciseAdjustment.objects.create(
+                                exercise=ex,
+                                sets=ex.sets,
+                                reps=ex.reps,
+                                weight=ex.weight,
+                                reason=adjustments[ai_name].get("reason", "")
+                            )
+
+                            modified.append({
+                                "name": db_name,
+                                "reason": adjustments[ai_name].get("reason", "")
+                            })
 
             return Response({
                 "feedback": serializer.data,
@@ -89,7 +103,7 @@ Devuelve un JSON con este formato para los ejercicios de powerlifting:
                 "session_id": session.id if session else None
             }, status=status.HTTP_201_CREATED)
 
-        except openai.error.OpenAIError as e:
+        except openai.OpenAIError as e:
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
