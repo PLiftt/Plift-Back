@@ -34,6 +34,8 @@ class ExerciseSerializer(serializers.ModelSerializer):
         predefined = data.get("predefined_name")
         custom = data.get("custom_name")
 
+        if self.instance:
+            return data
         if predefined == "Otro" and not custom:
             raise serializers.ValidationError("Debe especificar el nombre si selecciona 'Otro'.")
         if predefined and predefined != "Otro":
@@ -51,6 +53,29 @@ class ExerciseSerializer(serializers.ModelSerializer):
         validated_data.pop("custom_name", None)
         return super().create(validated_data)
 
+    def update(self, instance, validated_data):
+        # Actualiza normalmente los campos del ejercicio
+        instance = super().update(instance, validated_data)
+
+        # --- Lógica automática de completado ---
+        session = instance.session
+        block = session.block
+
+        # ✅ Actualizar estado de la sesión
+        exercises = session.exercises.all()
+        session_completed = all(e.completed for e in exercises)
+        if session.completed != session_completed:
+            session.completed = session_completed
+            session.save()
+
+        # ✅ Actualizar estado del bloque
+        sessions = block.sessions.all()
+        block_completed = all(s.completed for s in sessions)
+        if block.completed != block_completed:
+            block.completed = block_completed
+            block.save()
+
+        return instance
 
     
 class TrainingSessionSerializer(serializers.ModelSerializer):

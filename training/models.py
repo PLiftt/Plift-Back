@@ -28,6 +28,7 @@ class TrainingBlock(models.Model):
     end_date = models.DateField()
     goal_competition_date = models.DateField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
+    completed = models.BooleanField(default=False)
 
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
@@ -38,6 +39,7 @@ class TrainingSession(models.Model):
     block = models.ForeignKey(TrainingBlock, on_delete=models.CASCADE, related_name="sessions")
     date = models.DateField()
     notes = models.TextField(blank=True, null=True)
+    completed = models.BooleanField(default=False)
 
     def __str__(self):
         return f"Sesión {self.date} - {self.block.name}"
