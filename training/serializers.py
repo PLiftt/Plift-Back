@@ -87,10 +87,19 @@ class TrainingSessionSerializer(serializers.ModelSerializer):
 
 class TrainingBlockSerializer(serializers.ModelSerializer):
     sessions = TrainingSessionSerializer(many=True, read_only=True)
-    
+    athlete_name = serializers.SerializerMethodField()
+
     class Meta:
         model = TrainingBlock
         fields = "__all__"
+
+    def get_athlete_name(self, obj):
+        if obj.athlete:
+            first = obj.athlete.first_name or ""
+            last = obj.athlete.last_name or ""
+            return f"{first} {last}".strip()
+        return ""
+
 
 class AthleteProgressSerializer(serializers.ModelSerializer):
     class Meta:
