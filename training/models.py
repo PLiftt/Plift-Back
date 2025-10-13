@@ -40,7 +40,7 @@ class TrainingSession(models.Model):
     date = models.DateField()
     notes = models.TextField(blank=True, null=True)
     completed = models.BooleanField(default=False)
-    is_active = models.BooleanField(default=False)
+    started = models.BooleanField(default=False)
 
     def __str__(self):
         return f"Sesión {self.date} - {self.block.name}"
