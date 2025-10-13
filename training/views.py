@@ -77,6 +77,7 @@ class TrainingSessionViewSet(viewsets.ModelViewSet):
         if session.completed:
             return Response({"detail": "La sesión ya fue finalizada."}, status=status.HTTP_400_BAD_REQUEST)
         session.completed = True
+        session.started = False
         session.save()
         return Response({"detail": f"Sesión {session.id} finalizada."}, status=status.HTTP_200_OK)
 

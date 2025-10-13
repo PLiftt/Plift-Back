@@ -22,7 +22,7 @@ def athlete_feedback(request):
     serializer = AthleteFeedbackSerializer(data=request.data)
     if serializer.is_valid():
 
-        session = TrainingSession.objects.filter(block__athlete=request.user, is_active=True).first()
+        session = TrainingSession.objects.filter(block__athlete=request.user, started=True).first()
         feedback = serializer.save(athlete=request.user, session=session)
         progress = AthleteProgress.objects.filter(athlete=request.user).order_by("-date")[:3]
         
@@ -40,9 +40,9 @@ Feedback diario:
 
 Devuelve un JSON con este formato para los ejercicios de powerlifting:
 {{
-    "Squat": {{"sets": int, "reps": int, "weight": float, "rpe": float, "reason": "motivo del ajuste"}},
-    "Bench": {{"sets": int, "reps": int, "weight": float, "rpe": float, "reason": "motivo del ajuste"}},
-    "Deadlift": {{"sets": int, "reps": int, "weight": float, "rpe": float, "reason": "motivo del ajuste"}}
+    "Squat": {{"sets": int, "reps": int, "weight": float, "reason": "motivo del ajuste"}},
+    "Bench": {{"sets": int, "reps": int, "weight": float, "reason": "motivo del ajuste"}},
+    "Deadlift": {{"sets": int, "reps": int, "weight": float, "reason": "motivo del ajuste"}}
 }}
 """
 
@@ -80,7 +80,6 @@ Devuelve un JSON con este formato para los ejercicios de powerlifting:
                             ex.sets = adjustments[ai_name]["sets"]
                             ex.reps = adjustments[ai_name]["reps"]
                             ex.weight = adjustments[ai_name]["weight"]
-                            ex.rpe = adjustments[ai_name]["rpe"]
                             ex.save()
 
                             # Guardar el ajuste con motivo
@@ -89,7 +88,6 @@ Devuelve un JSON con este formato para los ejercicios de powerlifting:
                                 sets=ex.sets,
                                 reps=ex.reps,
                                 weight=ex.weight,
-                                rpe=ex.rpe,
                                 reason=adjustments[ai_name].get("reason", "")
                             )
 
