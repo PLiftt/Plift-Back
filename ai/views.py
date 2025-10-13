@@ -40,9 +40,9 @@ Feedback diario:
 
 Devuelve un JSON con este formato para los ejercicios de powerlifting:
 {{
-    "Squat": {{"sets": int, "reps": int, "weight": float, "reason": "motivo del ajuste"}},
-    "Bench": {{"sets": int, "reps": int, "weight": float, "reason": "motivo del ajuste"}},
-    "Deadlift": {{"sets": int, "reps": int, "weight": float, "reason": "motivo del ajuste"}}
+    "Squat": {{"sets": int, "reps": int, "weight": float, "rpe": float, "reason": "motivo del ajuste"}},
+    "Bench": {{"sets": int, "reps": int, "weight": float, "rpe": float, "reason": "motivo del ajuste"}},
+    "Deadlift": {{"sets": int, "reps": int, "weight": float, "rpe": float, "reason": "motivo del ajuste"}}
 }}
 """
 
@@ -80,6 +80,7 @@ Devuelve un JSON con este formato para los ejercicios de powerlifting:
                             ex.sets = adjustments[ai_name]["sets"]
                             ex.reps = adjustments[ai_name]["reps"]
                             ex.weight = adjustments[ai_name]["weight"]
+                            ex.rpe = adjustments[ai_name]["rpe"]
                             ex.save()
 
                             # Guardar el ajuste con motivo
@@ -88,6 +89,7 @@ Devuelve un JSON con este formato para los ejercicios de powerlifting:
                                 sets=ex.sets,
                                 reps=ex.reps,
                                 weight=ex.weight,
+                                rpe=ex.rpe,
                                 reason=adjustments[ai_name].get("reason", "")
                             )
 
