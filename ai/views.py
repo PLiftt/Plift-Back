@@ -22,7 +22,7 @@ def athlete_feedback(request):
     serializer = AthleteFeedbackSerializer(data=request.data)
     if serializer.is_valid():
 
-        session = TrainingSession.objects.filter(block__athlete=request.user).order_by("-date").first()
+        session = TrainingSession.objects.filter(block__athlete=request.user, is_active=True).first()
         feedback = serializer.save(athlete=request.user, session=session)
         progress = AthleteProgress.objects.filter(athlete=request.user).order_by("-date")[:3]
         
