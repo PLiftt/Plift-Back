@@ -60,24 +60,21 @@ class TrainingSessionViewSet(viewsets.ModelViewSet):
 
         return TrainingSession.objects.none()
     
-    @action(detail=True, methods=['post'], url_path='start')
+    @action(detail=True, methods=["post"])
     def start(self, request, pk=None):
         session = self.get_object()
-        if session.started:
-            return Response({"detail": "La sesión ya fue iniciada."}, status=status.HTTP_400_BAD_REQUEST)
-        session.started = True
+        if session.status == "in_progress":
+            return Response({"detail": "La sesión ya está iniciada."}, status=status.HTTP_400_BAD_REQUEST)
+        session.status = "in_progress"
         session.save()
         return Response({"detail": f"Sesión {session.id} iniciada."}, status=status.HTTP_200_OK)
 
-    @action(detail=True, methods=['post'], url_path='finish')
+    @action(detail=True, methods=["post"])
     def finish(self, request, pk=None):
         session = self.get_object()
-        if not session.started:
-            return Response({"detail": "La sesión no ha sido iniciada aún."}, status=status.HTTP_400_BAD_REQUEST)
-        if session.completed:
-            return Response({"detail": "La sesión ya fue finalizada."}, status=status.HTTP_400_BAD_REQUEST)
-        session.completed = True
-        session.started = False
+        if session.status != "in_progress":
+            return Response({"detail": "Solo puedes finalizar una sesión en progreso."}, status=status.HTTP_400_BAD_REQUEST)
+        session.status = "completed"
         session.save()
         return Response({"detail": f"Sesión {session.id} finalizada."}, status=status.HTTP_200_OK)
 

@@ -36,14 +36,15 @@ class TrainingBlock(models.Model):
 
 
 class TrainingSession(models.Model):
+    STATUS_CHOICES = [
+        ("pending", "Pendiente"),
+        ("in_progress", "En progreso"),
+        ("completed", "Finalizada"),
+    ]
     block = models.ForeignKey(TrainingBlock, on_delete=models.CASCADE, related_name="sessions")
     date = models.DateField()
     notes = models.TextField(blank=True, null=True)
-    completed = models.BooleanField(default=False)
-    started = models.BooleanField(default=False)
-
-    def __str__(self):
-        return f"Sesión {self.date} - {self.block.name}"
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="pending")
 
 
 class Exercise(models.Model):

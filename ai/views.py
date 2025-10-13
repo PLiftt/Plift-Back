@@ -16,13 +16,25 @@ openai.api_key = settings.OPENAI_API_KEY
 @permission_classes([IsAuthenticated])
 def athlete_feedback(request):
     """
-    El atleta responde feedback diario y se ajusta la última sesión automáticamente,
-    solo modificando los ejercicios existentes y registrando la razón del cambio.
+    El atleta responde feedback diario y se ajusta la última sesión activa automáticamente,
+    sin modificar sesiones que ya estén finalizadas.
     """
     serializer = AthleteFeedbackSerializer(data=request.data)
     if serializer.is_valid():
 
-        session = TrainingSession.objects.filter(block__athlete=request.user, started=True).first()
+        # Solo tomar la sesión que esté en progreso
+        session = TrainingSession.objects.filter(
+            block__athlete=request.user, 
+            status="in_progress"
+        ).first()
+
+        if not session:
+            return Response(
+                {"error": "No hay una sesión activa para ajustar."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Guardar feedback
         feedback = serializer.save(athlete=request.user, session=session)
         progress = AthleteProgress.objects.filter(athlete=request.user).order_by("-date")[:3]
         
@@ -65,8 +77,8 @@ Devuelve un JSON con este formato para los ejercicios de powerlifting:
 
             modified = []
 
-            if session:
-                # Mapear nombres del JSON a nombres existentes en la DB
+            # Evita modificar si la sesión fue completada (seguridad extra)
+            if session.status != "completed":
                 name_map = {
                     "Squat": "Sentadilla",
                     "Bench": "Bench Press",
@@ -82,7 +94,6 @@ Devuelve un JSON con este formato para los ejercicios de powerlifting:
                             ex.weight = adjustments[ai_name]["weight"]
                             ex.save()
 
-                            # Guardar el ajuste con motivo
                             ExerciseAdjustment.objects.create(
                                 exercise=ex,
                                 sets=ex.sets,
@@ -95,6 +106,11 @@ Devuelve un JSON con este formato para los ejercicios de powerlifting:
                                 "name": db_name,
                                 "reason": adjustments[ai_name].get("reason", "")
                             })
+            else:
+                return Response(
+                    {"error": "No se pueden modificar sesiones ya completadas."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
 
             return Response({
                 "feedback": serializer.data,
