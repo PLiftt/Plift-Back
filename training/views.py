@@ -1,4 +1,5 @@
 from rest_framework import viewsets, permissions
+from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied
 from .models import TrainingBlock, TrainingSession, Exercise, AthleteProgress
 from .serializers import TrainingBlockSerializer, TrainingSessionSerializer, ExerciseSerializer, AthleteProgressSerializer
@@ -57,6 +58,26 @@ class TrainingSessionViewSet(viewsets.ModelViewSet):
             return TrainingSession.objects.all()
 
         return TrainingSession.objects.none()
+    
+    @action(detail=True, methods=["post"], permission_classes=[permissions.IsAuthenticated])
+    def start(self, request, pk=None):
+        """
+        Marca la sesión como iniciada para el atleta.
+        Solo el atleta de la sesión puede iniciar.
+        """
+        session = self.get_object()
+        user = request.user
+
+        if user.role != "athlete" or session.block.athlete != user:
+            return Response({"detail": "No puedes iniciar esta sesión."}, status=status.HTTP_403_FORBIDDEN)
+
+        # Desactivar otras sesiones activas del mismo atleta
+        TrainingSession.objects.filter(block__athlete=user, is_active=True).update(is_active=False)
+
+        session.is_active = True
+        session.save()
+
+        return Response({"detail": f"Sesión {session.id} iniciada."}, status=status.HTTP_200_OK)
 
 
 class ExerciseViewSet(viewsets.ModelViewSet):
