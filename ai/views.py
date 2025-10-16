@@ -116,17 +116,17 @@ Ejemplo:
                     if ai_name in adjustments:
                         ex = session.exercises.filter(name=db_name).first()
                         if ex:
-                            ex.sets = adjustments[ai_name]["sets"]
-                            ex.reps = adjustments[ai_name]["reps"]
-                            ex.weight = adjustments[ai_name]["weight"]
-                            ex.save()
+                            # ex.sets = adjustments[ai_name]["sets"]
+                            # ex.reps = adjustments[ai_name]["reps"]
+                            # ex.weight = adjustments[ai_name]["weight"]
+                            # ex.save()
 
                             ExerciseAdjustment.objects.create(
                                 exercise=ex,
-                                sets=ex.sets,
-                                reps=ex.reps,
-                                weight=ex.weight,
-                                reason=adjustments[ai_name].get("reason", "")
+                                sets=adjustments[ai_name]["sets"],
+                                reps=adjustments[ai_name]["reps"],
+                                weight=adjustments[ai_name]["weight"],
+                                reason=adjustments[ai_name].get("reason", ""),
                             )
 
                             modified.append({
@@ -150,3 +150,46 @@ Ejemplo:
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def confirm_feedback(request):
+    """
+    El atleta confirma qué ajustes aplicar según la IA.
+    """
+    data = request.data
+    session_id = data.get("session_id")
+    accepted = data.get("accepted", {})
+
+    session = TrainingSession.objects.filter(id=session_id, block__athlete=request.user).first()
+    if not session:
+        return Response({"error": "Sesión no encontrada"}, status=status.HTTP_404_NOT_FOUND)
+
+    name_map = {
+        "Squat": "Sentadilla",
+        "Bench": "Bench Press",
+        "Deadlift": "Peso muerto"
+    }
+
+    applied = []
+    for ai_name, accept in accepted.items():
+        if not accept:
+            continue
+        db_name = name_map.get(ai_name)
+        ex = session.exercises.filter(name=db_name).first()
+        if ex:
+            adj = ExerciseAdjustment.objects.filter(exercise=ex, pending=True).last()
+            if adj:
+                ex.sets = adj.sets
+                ex.reps = adj.reps
+                ex.weight = adj.weight
+                ex.save()
+                adj.pending = False
+                adj.save()
+                applied.append(db_name)
+
+    return Response({
+        "message": "Cambios aplicados correctamente.",
+        "applied_exercises": applied
+    }, status=status.HTTP_200_OK)

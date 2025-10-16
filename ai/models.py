@@ -24,6 +24,7 @@ class ExerciseAdjustment(models.Model):
     weight = models.FloatField()
     reason = models.TextField(blank=True, null=True)
     date = models.DateTimeField(auto_now_add=True)
+    pending = models.BooleanField(default=True)
 
     def __str__(self):
         return f"{self.exercise.name} - {self.date.date()} - {self.reason or 'Sin motivo'}"
