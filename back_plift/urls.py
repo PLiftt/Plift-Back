@@ -8,6 +8,9 @@ from drf_yasg.views import get_schema_view
 from drf_yasg import openapi
 from training.urls import router as training_router
 from ai.urls import urlpatterns as ai_urls
+from django.conf import settings
+from django.conf.urls.static import static
+from django.contrib import admin
 
 
 schema_view = get_schema_view(
@@ -34,7 +37,13 @@ urlpatterns = [
     path("token/refresh/", TokenRefreshView.as_view(), name="token_refresh"),
     path('swagger/', schema_view.with_ui('swagger', cache_timeout=0), name='schema-swagger-ui'),
     path('', include((ai_urls, 'ai'), namespace='ai')),
+    path('', include('contact.urls')),   
+    path("admin/", admin.site.urls), 
+
 
     
     path("", include(router.urls)),
 ] + auth_urls
+
+if settings.DEBUG:
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
