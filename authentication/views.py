@@ -8,10 +8,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from drf_yasg import openapi
 from drf_yasg.utils import swagger_auto_schema
-from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
-from django.utils.encoding import force_bytes
-from django.contrib.auth.tokens import default_token_generator
-from django.core.mail import send_mail
+from django.core.mail import send_mail, EmailMultiAlternatives
 from django.conf import settings
 import random
 
@@ -41,6 +38,33 @@ class RegisterView(generics.CreateAPIView):
     )
     def post(self, request, *args, **kwargs):
         return super().post(request, *args, **kwargs)
+    
+    def perform_create(self, serializer):
+        user = serializer.save()
+
+        # Enviar correo de bienvenida
+        subject = "¡Bienvenido a PLift!"
+        from_email = settings.DEFAULT_FROM_EMAIL
+        to = [user.email]
+        text_content = f"Hola {user.first_name}, bienvenido a Plift."
+        html_content = f"""
+        <html>
+          <body style="font-family: Arial, sans-serif; background-color: #f9f9f9; padding: 20px;">
+            <div style="max-width: 600px; margin: auto; background: white; border-radius: 10px; padding: 20px; text-align: center;">
+              <h2 style="color: #333;">¡Bienvenido a <span style="color: #007bff;">PLift</span>!</h2>
+              <p style="font-size: 16px;">Hola <b>{user.first_name}</b>,</p>
+              <p style="font-size: 15px;">Tu cuenta ha sido creada exitosamente 🎉</p>
+              <p>Nos alegra tenerte como parte de la comunidad. Prepárate para llevar tu entrenamiento al siguiente nivel 💪</p>
+              <hr style="margin: 20px 0;">
+              <p style="font-size: 14px; color: #555;">El equipo de PLiftS</p>
+            </div>
+          </body>
+        </html>
+        """
+
+        msg = EmailMultiAlternatives(subject, text_content, from_email, to)
+        msg.attach_alternative(html_content, "text/html")
+        msg.send()
 
 class UpdateProfileView(generics.UpdateAPIView):
     serializer_class = UserUpdateSerializer
@@ -198,16 +222,38 @@ class ResetPasswordRequestView(APIView):
         user.reset_code_expiry = timezone.now() + timezone.timedelta(minutes=15)
         user.save()
 
-        # Enviar correo
-        send_mail(
-            subject="Código para cambiar contraseña - Plift",
-            message=f"Hola {user.first_name}, tu código para restablecer la contraseña es: {code}\n\nEl código expira en 15 minutos.",
-            from_email="tucorreo@gmail.com",
-            recipient_list=[email],
-            fail_silently=False,
-        )
+        # Enviar correo bonito con HTML
+        subject = "Código para cambiar contraseña - Plift"
+        html_content = f"""
+        <html>
+        <body style="font-family: Arial, sans-serif; background-color:#f9f9f9; padding:20px;">
+            <div style="max-width:600px; margin:auto; background:white; border-radius:10px; padding:30px; box-shadow:0 2px 8px rgba(0,0,0,0.1);">
+                <h2 style="color:#3B82F6; text-align:center;">🔐 Restablecimiento de contraseña</h2>
+                <p>Hola <strong>{user.first_name}</strong>,</p>
+                <p>Has solicitado restablecer tu contraseña en <strong>Plift</strong>.</p>
+                <p>Tu código de verificación es:</p>
+                <div style="text-align:center; margin:25px 0;">
+                    <span style="font-size:28px; letter-spacing:4px; font-weight:bold; color:#1E40AF;">{code}</span>
+                </div>
+                <p>Este código expirará en <strong>15 minutos</strong>.</p>
+                <p style="font-size:14px; color:#666;">Si no solicitaste este cambio, puedes ignorar este correo.</p>
+                <hr style="margin:25px 0;">
+                <p style="font-size:12px; color:#999; text-align:center;">© 2025 Plift. Todos los derechos reservados.</p>
+            </div>
+        </body>
+        </html>
+        """
+        from django.core.mail import EmailMultiAlternatives
+        from django.utils.html import strip_tags
+
+        text_content = strip_tags(html_content)
+
+        msg = EmailMultiAlternatives(subject, text_content, "tucorreo@gmail.com", [email])
+        msg.attach_alternative(html_content, "text/html")
+        msg.send(fail_silently=False)
+
         return Response({"message": f"Código enviado a {email}"}, status=status.HTTP_200_OK)
-    
+        
 class ResetPasswordConfirmView(APIView):
     permission_classes = []
 

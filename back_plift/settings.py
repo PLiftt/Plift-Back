@@ -23,7 +23,7 @@ INSTALLED_APPS = [
     'authentication',
     'training',
     'ai',
-    'chat',
+    'notification',
 ]
 
 MIDDLEWARE = [

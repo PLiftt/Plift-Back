@@ -2,7 +2,7 @@ from django.db import models
 
 from django.db import models
 from authentication.models import CustomUser
-from training.models import TrainingSession
+from training.models import TrainingSession, Exercise
 from django.core.exceptions import ValidationError
 
 class AthleteFeedback(models.Model):
@@ -16,3 +16,14 @@ class AthleteFeedback(models.Model):
 
     def __str__(self):
         return f"Feedback {self.athlete.email} {self.created_at.date()}"
+
+class ExerciseAdjustment(models.Model):
+    exercise = models.ForeignKey(Exercise, on_delete=models.CASCADE, related_name="adjustments")
+    sets = models.IntegerField()
+    reps = models.IntegerField()
+    weight = models.FloatField()
+    reason = models.TextField(blank=True, null=True)
+    date = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.exercise.name} - {self.date.date()} - {self.reason or 'Sin motivo'}"

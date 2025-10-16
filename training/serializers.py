@@ -19,12 +19,12 @@ class ExerciseSerializer(serializers.ModelSerializer):
         write_only=True,
         required=False
     )
-    # Campo opcional para nombre personalizado
     custom_name = serializers.CharField(
         max_length=30,
         required=False,
         write_only=True
     )
+    name = serializers.CharField(read_only=True)
 
     class Meta:
         model = Exercise
@@ -34,7 +34,8 @@ class ExerciseSerializer(serializers.ModelSerializer):
         predefined = data.get("predefined_name")
         custom = data.get("custom_name")
 
-        # Validar que haya un nombre
+        if self.instance:
+            return data
         if predefined == "Otro" and not custom:
             raise serializers.ValidationError("Debe especificar el nombre si selecciona 'Otro'.")
         if predefined and predefined != "Otro":
@@ -45,6 +46,37 @@ class ExerciseSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("Debe seleccionar un ejercicio o escribir uno.")
 
         return data
+
+    def create(self, validated_data):
+        # Quitar los campos que no existen en el modelo
+        validated_data.pop("predefined_name", None)
+        validated_data.pop("custom_name", None)
+        return super().create(validated_data)
+
+    def update(self, instance, validated_data):
+        # Actualiza normalmente los campos del ejercicio
+        instance = super().update(instance, validated_data)
+
+        # --- Lógica automática de completado ---
+        session = instance.session
+        block = session.block
+
+        # ✅ Actualizar estado de la sesión
+        exercises = session.exercises.all()
+        session_completed = all(e.completed for e in exercises)
+        if session.completed != session_completed:
+            session.completed = session_completed
+            session.save()
+
+        # ✅ Actualizar estado del bloque
+        sessions = block.sessions.all()
+        block_completed = all(s.completed for s in sessions)
+        if block.completed != block_completed:
+            block.completed = block_completed
+            block.save()
+
+        return instance
+
     
 class TrainingSessionSerializer(serializers.ModelSerializer):
     exercises = ExerciseSerializer(many=True, read_only=True)
@@ -55,10 +87,19 @@ class TrainingSessionSerializer(serializers.ModelSerializer):
 
 class TrainingBlockSerializer(serializers.ModelSerializer):
     sessions = TrainingSessionSerializer(many=True, read_only=True)
-    
+    athlete_name = serializers.SerializerMethodField()
+
     class Meta:
         model = TrainingBlock
         fields = "__all__"
+
+    def get_athlete_name(self, obj):
+        if obj.athlete:
+            first = obj.athlete.first_name or ""
+            last = obj.athlete.last_name or ""
+            return f"{first} {last}".strip()
+        return ""
+
 
 class AthleteProgressSerializer(serializers.ModelSerializer):
     class Meta:

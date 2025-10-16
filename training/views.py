@@ -1,5 +1,7 @@
-from rest_framework import viewsets, permissions
+from rest_framework import viewsets, permissions, status
+from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied
+from rest_framework.response import Response
 from .models import TrainingBlock, TrainingSession, Exercise, AthleteProgress
 from .serializers import TrainingBlockSerializer, TrainingSessionSerializer, ExerciseSerializer, AthleteProgressSerializer
 from django_filters.rest_framework import DjangoFilterBackend
@@ -57,6 +59,24 @@ class TrainingSessionViewSet(viewsets.ModelViewSet):
             return TrainingSession.objects.all()
 
         return TrainingSession.objects.none()
+    
+    @action(detail=True, methods=["post"])
+    def start(self, request, pk=None):
+        session = self.get_object()
+        if session.status == "in_progress":
+            return Response({"detail": "La sesión ya está iniciada."}, status=status.HTTP_400_BAD_REQUEST)
+        session.status = "in_progress"
+        session.save()
+        return Response({"detail": f"Sesión {session.id} iniciada."}, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=["post"])
+    def finish(self, request, pk=None):
+        session = self.get_object()
+        if session.status != "in_progress":
+            return Response({"detail": "Solo puedes finalizar una sesión en progreso."}, status=status.HTTP_400_BAD_REQUEST)
+        session.status = "completed"
+        session.save()
+        return Response({"detail": f"Sesión {session.id} finalizada."}, status=status.HTTP_200_OK)
 
 
 class ExerciseViewSet(viewsets.ModelViewSet):
