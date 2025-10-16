@@ -1,6 +1,7 @@
 import os
 import json
 import openai
+from openai import OpenAI
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -10,7 +11,6 @@ from .models import ExerciseAdjustment
 from .serializer import AthleteFeedbackSerializer
 from django.conf import settings
 
-openai.api_key = settings.OPENAI_API_KEY
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
@@ -19,10 +19,11 @@ def athlete_feedback(request):
     El atleta responde feedback diario y se ajusta la última sesión activa automáticamente,
     sin modificar sesiones que ya estén finalizadas.
     """
+    client = OpenAI(api_key=settings.OPENAI_API_KEY)
     serializer = AthleteFeedbackSerializer(data=request.data)
     if serializer.is_valid():
 
-        # Solo tomar la sesión que esté en progreso
+        # Buscar sesión en progreso
         session = TrainingSession.objects.filter(
             block__athlete=request.user, 
             status="in_progress"
@@ -38,6 +39,7 @@ def athlete_feedback(request):
         feedback = serializer.save(athlete=request.user, session=session)
         progress = AthleteProgress.objects.filter(athlete=request.user).order_by("-date")[:3]
         
+        # Contexto para el modelo
         context = f"""
 Atleta: {request.user.first_name} {request.user.last_name}
 Peso corporal: {request.user.bodyweight_kg} kg
@@ -59,16 +61,41 @@ Devuelve un JSON con este formato para los ejercicios de powerlifting:
 """
 
         try:
-            completion = openai.chat.completions.create(
+            completion = client.chat.completions.create(
                 model="gpt-3.5-turbo",
                 messages=[
-                    {"role": "system", "content": "Eres un coach de powerlifting que solo responde con JSON con ajustes de los ejercicios y un motivo."},
+                    {
+                        "role": "system",
+                        "content": """
+Eres un coach de powerlifting experto. 
+Tu tarea es analizar el feedback diario del atleta y ajustar los ejercicios principales (Squat, Bench y Deadlift).
+Debes devolver únicamente un JSON con los ajustes propuestos. 
+
+En cada ajuste incluye:
+- sets, reps, y weight con valores numéricos adecuados.
+- un campo "reason" con una explicación detallada (mínimo 2 oraciones) del por qué se realizó el ajuste, 
+  considerando el estado del atleta (fatiga, estrés, sueño, dolores, rendimiento reciente, etc.).
+  Usa un lenguaje natural, empático y técnico como un coach humano.
+
+Ejemplo:
+{
+  "Squat": {"sets": 4, "reps": 6, "weight": 80, 
+  "reason": "El atleta mostró buena recuperación y bajo nivel de fatiga, por lo que se mantiene la intensidad habitual para sostener la progresión."}
+}
+"""
+                    },
                     {"role": "user", "content": context}
                 ],
-                max_tokens=400,
-                temperature=0.5
+                max_tokens=600,
+                temperature=0.7
             )
-            ai_reply = completion.choices[0].message.content
+
+            ai_reply = completion.choices[0].message.content.strip()
+
+            start_idx = ai_reply.find("{")
+            end_idx = ai_reply.rfind("}") + 1
+            if start_idx != -1 and end_idx != -1:
+                ai_reply = ai_reply[start_idx:end_idx]
 
             try:
                 adjustments = json.loads(ai_reply)
@@ -77,7 +104,7 @@ Devuelve un JSON con este formato para los ejercicios de powerlifting:
 
             modified = []
 
-            # Evita modificar si la sesión fue completada (seguridad extra)
+            # Verificación adicional para no modificar sesiones terminadas
             if session.status != "completed":
                 name_map = {
                     "Squat": "Sentadilla",
