@@ -116,10 +116,7 @@ Ejemplo:
                     if ai_name in adjustments:
                         ex = session.exercises.filter(name=db_name).first()
                         if ex:
-                            # ex.sets = adjustments[ai_name]["sets"]
-                            # ex.reps = adjustments[ai_name]["reps"]
-                            # ex.weight = adjustments[ai_name]["weight"]
-                            # ex.save()
+                            data = adjustments[ai_name]
 
                             ExerciseAdjustment.objects.create(
                                 exercise=ex,
@@ -127,11 +124,15 @@ Ejemplo:
                                 reps=adjustments[ai_name]["reps"],
                                 weight=adjustments[ai_name]["weight"],
                                 reason=adjustments[ai_name].get("reason", ""),
+                                pending=True,
                             )
 
                             modified.append({
                                 "name": db_name,
-                                "reason": adjustments[ai_name].get("reason", "")
+                                "reason": adjustments[ai_name].get("reason", ""),
+                                "proposed_sets": data["sets"],
+                                "proposed_reps": data["reps"],
+                                "proposed_weight": data["weight"],
                             })
             else:
                 return Response(
@@ -157,39 +158,84 @@ Ejemplo:
 def confirm_feedback(request):
     """
     El atleta confirma qué ajustes aplicar según la IA.
+    Solo los confirmados se aplican al ejercicio real.
     """
     data = request.data
     session_id = data.get("session_id")
     accepted = data.get("accepted", {})
 
-    session = TrainingSession.objects.filter(id=session_id, block__athlete=request.user).first()
+    # Verificar sesión activa del atleta
+    session = TrainingSession.objects.filter(
+        id=session_id, block__athlete=request.user
+    ).first()
     if not session:
-        return Response({"error": "Sesión no encontrada"}, status=status.HTTP_404_NOT_FOUND)
+        return Response(
+            {"error": "Sesión no encontrada"},
+            status=status.HTTP_404_NOT_FOUND,
+        )
 
+    # Mapeo flexible (por si llegan en inglés o español)
     name_map = {
         "Squat": "Sentadilla",
+        "Sentadilla": "Sentadilla",
         "Bench": "Bench Press",
-        "Deadlift": "Peso muerto"
+        "Bench Press": "Bench Press",
+        "Deadlift": "Peso muerto",
+        "Peso muerto": "Peso muerto",
     }
 
     applied = []
+
+    # 🔍 Recorremos los ajustes confirmados por el usuario
     for ai_name, accept in accepted.items():
         if not accept:
             continue
-        db_name = name_map.get(ai_name)
-        ex = session.exercises.filter(name=db_name).first()
-        if ex:
-            adj = ExerciseAdjustment.objects.filter(exercise=ex, pending=True).last()
-            if adj:
-                ex.sets = adj.sets
-                ex.reps = adj.reps
-                ex.weight = adj.weight
-                ex.save()
-                adj.pending = False
-                adj.save()
-                applied.append(db_name)
 
-    return Response({
-        "message": "Cambios aplicados correctamente.",
-        "applied_exercises": applied
-    }, status=status.HTTP_200_OK)
+        db_name = name_map.get(ai_name)
+        if not db_name:
+            continue  # nombre no reconocido
+
+        ex = session.exercises.filter(name=db_name).first()
+        if not ex:
+            continue  # ejercicio no existe en esa sesión
+
+        # Buscar el último ajuste pendiente para ese ejercicio
+        adj = (
+            ExerciseAdjustment.objects.filter(exercise=ex, pending=True)
+            .order_by("-id")
+            .first()
+        )
+        if not adj:
+            continue  # no hay ajuste pendiente
+
+        # 🔧 Aplicar los cambios
+        ex.sets = adj.sets
+        ex.reps = adj.reps
+        ex.weight = adj.weight
+        ex.save()
+
+        # Marcar ajuste como aplicado
+        adj.pending = False
+        adj.save()
+
+        applied.append({
+            "exercise": db_name,
+            "new_sets": ex.sets,
+            "new_reps": ex.reps,
+            "new_weight": ex.weight,
+        })
+
+    # 🧩 Respuesta final
+    if applied:
+        return Response(
+            {
+                "message": "Hola.",
+                "applied_exercises": applied,
+            },
+            status=status.HTTP_200_OK,
+        )
+    else:
+        return Response(
+            {"message": "No se aplicó ningún cambio. Verifica los nombres o estados."},
+            status=status.HTTP_200_OK,
+        )
