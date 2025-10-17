@@ -48,13 +48,12 @@ class ExerciseSerializer(serializers.ModelSerializer):
         return data
 
     def create(self, validated_data):
-        # Quitar los campos que no existen en el modelo
         validated_data.pop("predefined_name", None)
         validated_data.pop("custom_name", None)
         return super().create(validated_data)
 
     def update(self, instance, validated_data):
-        # Actualiza normalmente los campos del ejercicio
+        # Actualiza los campos del ejercicio
         instance = super().update(instance, validated_data)
 
         # --- Lógica automática de completado ---
@@ -63,19 +62,25 @@ class ExerciseSerializer(serializers.ModelSerializer):
 
         # ✅ Actualizar estado de la sesión
         exercises = session.exercises.all()
-        session_completed = all(e.completed for e in exercises)
-        if session.completed != session_completed:
-            session.completed = session_completed
+        all_exercises_completed = all(e.completed for e in exercises)
+
+        if all_exercises_completed and session.status != "completed":
+            session.status = "completed"
+            session.save()
+        elif not all_exercises_completed and session.status == "completed":
+            session.status = "in_progress"
             session.save()
 
         # ✅ Actualizar estado del bloque
         sessions = block.sessions.all()
-        block_completed = all(s.completed for s in sessions)
-        if block.completed != block_completed:
-            block.completed = block_completed
+        all_sessions_completed = all(s.status == "completed" for s in sessions)
+
+        if block.completed != all_sessions_completed:
+            block.completed = all_sessions_completed
             block.save()
 
         return instance
+
 
     
 class TrainingSessionSerializer(serializers.ModelSerializer):
