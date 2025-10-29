@@ -5,6 +5,8 @@ from rest_framework.response import Response
 from .models import TrainingBlock, TrainingSession, Exercise, AthleteProgress
 from .serializers import TrainingBlockSerializer, TrainingSessionSerializer, ExerciseSerializer, AthleteProgressSerializer
 from django_filters.rest_framework import DjangoFilterBackend
+from notification.models import PushToken
+from notification.utils import send_push_notification
 
 
 class TrainingBlockViewSet(viewsets.ModelViewSet):
@@ -17,8 +19,19 @@ class TrainingBlockViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         if self.request.user.role != "coach":
             raise PermissionDenied("Solo los coaches pueden crear bloques")
-        serializer.save(coach=self.request.user)
+        bloque = serializer.save(coach=self.request.user)
 
+        # 🚀 Enviar notificación push solo al atleta correspondiente
+        athlete = bloque.athlete
+        if athlete:
+            tokens = PushToken.objects.filter(user=athlete)
+            for t in tokens:
+                send_push_notification(
+                    t.token,
+                    "Nuevo bloque asignado",
+                    "Tu coach ha creado un nuevo bloque.",
+                    {"event": "NEW_BLOCK", "blockId": bloque.id},
+                )
     def get_queryset(self):
         user = self.request.user
 
