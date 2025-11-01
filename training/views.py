@@ -14,6 +14,7 @@ import matplotlib.pyplot as plt
 from django.http import JsonResponse
 import io
 import base64
+from datetime import date
 
 class TrainingBlockViewSet(viewsets.ModelViewSet):
     queryset = TrainingBlock.objects.all()
@@ -155,6 +156,79 @@ class AthleteProgressViewSet(viewsets.ModelViewSet):
 
         if athlete.role != "athlete":
             return Response({"detail": "Solo atletas pueden ver su progreso."}, status=403)
+        
+        rpe_table = {
+            10:  [1.00, 0.95, 0.92, 0.89, 0.86, 0.84, 0.81, 0.79],
+            9.5: [0.98, 0.94, 0.90, 0.87, 0.84, 0.81, 0.79, 0.76],
+            9:   [0.96, 0.92, 0.89, 0.86, 0.81, 0.79, 0.76, 0.74],
+            8.5: [0.94, 0.90, 0.87, 0.84, 0.79, 0.76, 0.74, 0.71],
+            8:   [0.92, 0.89, 0.86, 0.81, 0.79, 0.76, 0.74, 0.71],
+            7.5: [0.91, 0.87, 0.84, 0.79, 0.76, 0.74, 0.71, 0.69],
+            7:   [0.89, 0.86, 0.84, 0.79, 0.74, 0.71, 0.69, 0.67],
+            6.5: [0.86, 0.84, 0.81, 0.76, 0.71, 0.69, 0.67, 0.64],
+            6:   [0.84, 0.81, 0.79, 0.74, 0.69, 0.67, 0.64, 0.62],
+            5:   [0.81, 0.79, 0.76, 0.71, 0.67, 0.64, 0.62, 0.59],
+            4:   [0.79, 0.76, 0.74, 0.69, 0.64, 0.62, 0.59, 0.57],
+        }
+        
+        week = date.today().isocalendar()[1]
+
+        bench_progress, _ = AthleteProgress.objects.get_or_create(
+            athlete=athlete,
+            exercise=AthleteProgress.ExerciseChoices.BENCH,
+            date__week=week,
+            defaults={"best_weight": 0, "estimated_1rm": 0},
+        )
+
+        last_bench_press = Exercise.objects.filter(
+            name=AthleteProgress.ExerciseChoices.BENCH,
+            session__block__athlete=athlete,
+            session__date__week=week,
+        ).first()
+
+        if last_bench_press:
+            percentage = rpe_table[last_bench_press.rpe_actual][last_bench_press.reps - 1]
+            bench_progress.best_weight = last_bench_press.weight_actual
+            bench_progress.estimated_1rm = bench_progress.best_weight / percentage
+            bench_progress.save()
+
+        squat_progress, _ = AthleteProgress.objects.get_or_create(
+            athlete=athlete,
+            exercise=AthleteProgress.ExerciseChoices.SQUAT,
+            date__week=week,
+            defaults={"best_weight": 0, "estimated_1rm": 0},
+        )
+
+        last_squat = Exercise.objects.filter(
+            name=AthleteProgress.ExerciseChoices.SQUAT,
+            session__block__athlete=athlete,
+            session__date__week=week,
+        ).first()
+
+        if last_squat:
+            percentage = rpe_table[last_squat.rpe_actual][last_squat.reps - 1]
+            squat_progress.best_weight = last_squat.weight
+            squat_progress.estimated_1rm = squat_progress.best_weight / percentage
+            squat_progress.save()
+
+        deadlift_progress, _ = AthleteProgress.objects.get_or_create(
+            athlete=athlete,
+            exercise=AthleteProgress.ExerciseChoices.DEADLIFT,
+            date__week=week,
+            defaults={"best_weight": 0, "estimated_1rm": 0},
+        )
+
+        last_deadlift = Exercise.objects.filter(
+            name=AthleteProgress.ExerciseChoices.DEADLIFT,
+            session__block__athlete=athlete,
+            session__date__week=week,
+        ).first()
+
+        if last_deadlift:
+            percentage = rpe_table[last_deadlift.rpe_actual][last_deadlift.reps - 1]
+            deadlift_progress.best_weight = last_deadlift.weight
+            deadlift_progress.estimated_1rm = deadlift_progress.best_weight / percentage
+            deadlift_progress.save()
 
         progress_data = (
             AthleteProgress.objects.filter(athlete=athlete)
