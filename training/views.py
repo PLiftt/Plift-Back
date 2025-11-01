@@ -262,35 +262,131 @@ class AthleteProgressViewSet(viewsets.ModelViewSet):
         return Response(structured)
     
     @action(detail=False, methods=["get"])
-    def strength_chart(self, request):
+    def block_progress(self, request):
+        """
+        Devuelve el progreso del atleta dentro de un bloque específico.
+        Usa el parámetro ?block=<id>
+        """
         athlete = request.user
-        data = self.strength_progress(request).data  # reutiliza la lógica anterior
+        block_id = request.query_params.get("block")
 
-        # Convertimos el JSON a formato de gráfico
-        weeks = list(data.keys())
-        exercises = ["Sentadilla", "Press Banca", "Peso Muerto"]
+        if athlete.role != "athlete":
+            return Response({"detail": "Solo los atletas pueden ver su progreso."}, status=403)
 
-        plt.figure(figsize=(8,5))
-        for exercise in exercises:
+        if not block_id:
+            return Response({"detail": "Debes indicar el parámetro ?block=<id>."}, status=400)
+
+        # Obtenemos las fechas del bloque para filtrar los progresos dentro de ese rango
+        try:
+            block = TrainingBlock.objects.get(id=block_id, athlete=athlete)
+        except TrainingBlock.DoesNotExist:
+            return Response({"detail": "Bloque no encontrado."}, status=404)
+
+        # Filtramos registros de progreso del atleta dentro del rango del bloque
+        progress_qs = AthleteProgress.objects.filter(
+            athlete=athlete,
+            date__range=[block.start_date, block.end_date]
+        )
+
+        if not progress_qs.exists():
+            return Response({"detail": "No hay registros de progreso en este bloque."}, status=404)
+
+        # Promedio por tipo de ejercicio (Sentadilla, Press Banca, Peso Muerto)
+        progress_data = (
+            progress_qs.values("exercise")
+            .annotate(
+                avg_best_weight=Avg("best_weight"),
+                avg_est_1rm=Avg("estimated_1rm"),
+            )
+            .order_by("exercise")
+        )
+
+        # Asegurar que todos los ejercicios aparezcan, aunque no tengan datos
+        structured = {}
+        all_exercises = [choice[0] for choice in AthleteProgress.ExerciseChoices.choices]
+
+        for ex in all_exercises:
+            match = next((p for p in progress_data if p["exercise"] == ex), None)
+            structured[ex] = {
+                "avg_best_weight": match["avg_best_weight"] if match else None,
+                "avg_est_1rm": match["avg_est_1rm"] if match else None,
+            }
+
+        return Response({
+            "block_id": block_id,
+            "athlete": athlete.email,
+            "progress": structured
+        })
+
+    
+    @action(detail=False, methods=["get"])
+    def strength_chart(self, request):
+        """
+        Devuelve un gráfico del progreso (estimación de 1RM) por bloque.
+        Usa el parámetro ?block=<id>
+        """
+        athlete = request.user
+        block_id = request.query_params.get("block")
+
+        if athlete.role != "athlete":
+            return Response({"detail": "Solo los atletas pueden ver su progreso."}, status=403)
+
+        if not block_id:
+            return Response({"detail": "Debes indicar el parámetro ?block=<id>."}, status=400)
+
+        # Buscar el bloque y validar que pertenezca al atleta
+        try:
+            block = TrainingBlock.objects.get(id=block_id, athlete=athlete)
+        except TrainingBlock.DoesNotExist:
+            return Response({"detail": "Bloque no encontrado."}, status=404)
+
+        # Filtrar los progresos del atleta dentro del rango del bloque
+        progress_qs = AthleteProgress.objects.filter(
+            athlete=athlete,
+            date__range=[block.start_date, block.end_date]
+        )
+
+        if not progress_qs.exists():
+            return Response({"detail": "No hay registros de progreso en este bloque."}, status=404)
+
+        # Agrupar por fecha y ejercicio para mostrar evolución dentro del bloque
+        progress_data = (
+            progress_qs.values("date", "exercise")
+            .annotate(avg_est_1rm=Avg("estimated_1rm"))
+            .order_by("date")
+        )
+
+        # Estructurar datos por ejercicio
+        exercises = [choice[0] for choice in AthleteProgress.ExerciseChoices.choices]
+        dates = sorted(set([str(p["date"]) for p in progress_data]))
+
+        plt.figure(figsize=(8, 5))
+        for ex in exercises:
             y = [
-                data[week][exercise]["avg_est_1rm"]
-                if data[week][exercise]["avg_est_1rm"] is not None else None
-                for week in weeks
+                next((p["avg_est_1rm"] for p in progress_data if str(p["date"]) == d and p["exercise"] == ex), None)
+                for d in dates
             ]
-            plt.plot(weeks, y, marker="o", label=exercise)
+            plt.plot(dates, y, marker="o", label=ex)
 
-        plt.title("Evolución del 1RM estimado por semana")
-        plt.xlabel("Semana")
+        plt.title(f"Evolución del 1RM estimado - Bloque {block.name}")
+        plt.xlabel("Fecha")
         plt.ylabel("1RM estimado (kg)")
+        plt.xticks(rotation=45)
         plt.legend()
         plt.grid(True)
 
-        # Convertir a imagen base64
+        # Convertir el gráfico a base64
         buffer = io.BytesIO()
-        plt.savefig(buffer, format="png")
+        plt.savefig(buffer, format="png", bbox_inches="tight")
         buffer.seek(0)
         image_png = buffer.getvalue()
         buffer.close()
+        plt.close()
 
         graphic = base64.b64encode(image_png).decode("utf-8")
-        return JsonResponse({"chart": graphic})
+        return JsonResponse({
+            "block": block.name,
+            "start_date": str(block.start_date),
+            "end_date": str(block.end_date),
+            "chart": graphic
+        })
