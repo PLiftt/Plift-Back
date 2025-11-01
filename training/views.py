@@ -7,6 +7,9 @@ from .serializers import TrainingBlockSerializer, TrainingSessionSerializer, Exe
 from django_filters.rest_framework import DjangoFilterBackend
 from notification.models import PushToken
 from notification.utils import send_push_notification
+from django.db.models import Avg
+from django.db.models.functions import TruncWeek
+from rest_framework.exceptions import PermissionDenied
 
 
 class TrainingBlockViewSet(viewsets.ModelViewSet):
@@ -117,7 +120,7 @@ class ExerciseViewSet(viewsets.ModelViewSet):
             return Exercise.objects.all()
 
         return Exercise.objects.none()
-
+    
 
 class AthleteProgressViewSet(viewsets.ModelViewSet):
     queryset = AthleteProgress.objects.all()
@@ -125,8 +128,6 @@ class AthleteProgressViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.IsAuthenticated]
 
     def perform_create(self, serializer):
-        # ✅ Tanto atleta como coach pueden registrar progreso
-        # pero si es atleta, se asegura que el progreso quede asociado a él mismo
         if self.request.user.role == "athlete":
             serializer.save(athlete=self.request.user)
         elif self.request.user.role == "coach":
@@ -136,17 +137,49 @@ class AthleteProgressViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         user = self.request.user
-
         if user.role == "coach":
-            # Un coach debería ver solo progreso de sus atletas (opcional)
-            return AthleteProgress.objects.filter(
-                athlete__coaches__coach=user
-            )
-
+            return AthleteProgress.objects.filter(athlete__coaches__coach=user)
         if user.role == "athlete":
             return AthleteProgress.objects.filter(athlete=user)
-
         if user.role == "admin":
             return AthleteProgress.objects.all()
-
         return AthleteProgress.objects.none()
+
+    @action(detail=False, methods=["get"])
+    def strength_progress(self, request):
+        """Devuelve la evolución semanal del 1RM promedio por ejercicio."""
+        athlete = request.user
+
+        if athlete.role != "athlete":
+            return Response({"detail": "Solo atletas pueden ver su progreso."}, status=403)
+
+        progress_data = (
+            AthleteProgress.objects.filter(athlete=athlete)
+            .annotate(week=TruncWeek("date"))
+            .values("exercise", "week")
+            .annotate(
+                avg_best_weight=Avg("best_weight"),
+                avg_est_1rm=Avg("estimated_1rm"),
+            )
+            .order_by("week")
+        )
+
+        # Reorganiza los datos por semana → {week: {Sentadilla: x, Press Banca: y, Peso Muerto: z}}
+        structured = {}
+        for entry in progress_data:
+            week = entry["week"].strftime("%Y-%m-%d")
+            exercise = entry["exercise"]
+            if week not in structured:
+                structured[week] = {}
+            structured[week][exercise] = {
+                "avg_best_weight": entry["avg_best_weight"],
+                "avg_est_1rm": entry["avg_est_1rm"],
+            }
+
+        # Rellena con ejercicios faltantes (para que siempre haya los 3)
+        all_exercises = [choice[0] for choice in AthleteProgress.ExerciseChoices.choices]
+        for week, data in structured.items():
+            for ex in all_exercises:
+                data.setdefault(ex, {"avg_best_weight": None, "avg_est_1rm": None})
+
+        return Response(structured)

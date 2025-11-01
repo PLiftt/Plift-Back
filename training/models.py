@@ -61,12 +61,18 @@ class Exercise(models.Model):
 
 
 class AthleteProgress(models.Model):
+    class ExerciseChoices(models.TextChoices):
+        SQUAT = "Sentadilla", "Sentadilla"
+        BENCH = "Press Banca", "Press Banca"
+        DEADLIFT = "Peso Muerto", "Peso Muerto"
+
     athlete = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name="progress")
-    exercise = models.CharField(max_length=100) 
-    best_weight = models.FloatField()  
-    estimated_1rm = models.FloatField(null=True, blank=True) 
+    exercise = models.CharField(max_length=100, choices=ExerciseChoices.choices)
+    best_weight = models.FloatField()  # Peso más alto levantado
+    estimated_1rm = models.FloatField(null=True, blank=True)  # Estimación del 1RM
     date = models.DateField(auto_now_add=True)
 
     def __str__(self):
         return f"{self.athlete.email} - {self.exercise}: {self.best_weight}kg"
+
 
