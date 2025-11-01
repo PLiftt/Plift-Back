@@ -10,7 +10,10 @@ from notification.utils import send_push_notification
 from django.db.models import Avg
 from django.db.models.functions import TruncWeek
 from rest_framework.exceptions import PermissionDenied
-
+import matplotlib.pyplot as plt
+from django.http import JsonResponse
+import io
+import base64
 
 class TrainingBlockViewSet(viewsets.ModelViewSet):
     queryset = TrainingBlock.objects.all()
@@ -183,3 +186,37 @@ class AthleteProgressViewSet(viewsets.ModelViewSet):
                 data.setdefault(ex, {"avg_best_weight": None, "avg_est_1rm": None})
 
         return Response(structured)
+    
+    @action(detail=False, methods=["get"])
+    def strength_chart(self, request):
+        athlete = request.user
+        data = self.strength_progress(request).data  # reutiliza la lógica anterior
+
+        # Convertimos el JSON a formato de gráfico
+        weeks = list(data.keys())
+        exercises = ["Sentadilla", "Press Banca", "Peso Muerto"]
+
+        plt.figure(figsize=(8,5))
+        for exercise in exercises:
+            y = [
+                data[week][exercise]["avg_est_1rm"]
+                if data[week][exercise]["avg_est_1rm"] is not None else None
+                for week in weeks
+            ]
+            plt.plot(weeks, y, marker="o", label=exercise)
+
+        plt.title("Evolución del 1RM estimado por semana")
+        plt.xlabel("Semana")
+        plt.ylabel("1RM estimado (kg)")
+        plt.legend()
+        plt.grid(True)
+
+        # Convertir a imagen base64
+        buffer = io.BytesIO()
+        plt.savefig(buffer, format="png")
+        buffer.seek(0)
+        image_png = buffer.getvalue()
+        buffer.close()
+
+        graphic = base64.b64encode(image_png).decode("utf-8")
+        return JsonResponse({"chart": graphic})
