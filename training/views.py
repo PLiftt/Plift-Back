@@ -336,19 +336,13 @@ class AthleteProgressViewSet(viewsets.ModelViewSet):
         dentro de un bloque específico (para React Native con react-native-chart-kit).
         """
         athlete = request.user
-        block_id = request.query_params.get("block")
 
         if athlete.role != "athlete":
             return Response({"detail": "Solo los atletas pueden ver su progreso."}, status=403)
 
-        if not block_id:
-            return Response({"detail": "Debes indicar el parámetro ?block=<id>."}, status=400)
-
-        # Validar bloque
-        try:
-            block = TrainingBlock.objects.get(id=block_id, athlete=athlete)
-        except TrainingBlock.DoesNotExist:
-            return Response({"detail": "Bloque no encontrado."}, status=404)
+        block = TrainingBlock.objects.filter(
+            athlete=athlete
+        ).order_by("-start_date").first()
 
         # Tabla RPE
         rpe_table = {
