@@ -10,10 +10,7 @@ from notification.utils import send_push_notification
 from django.db.models import Avg
 from django.db.models.functions import TruncWeek
 from rest_framework.exceptions import PermissionDenied
-import matplotlib.pyplot as plt
-from django.http import JsonResponse
-import io
-import base64
+from rest_framework.exceptions import ValidationError
 from datetime import date
 
 class TrainingBlockViewSet(viewsets.ModelViewSet):
@@ -28,7 +25,6 @@ class TrainingBlockViewSet(viewsets.ModelViewSet):
             raise PermissionDenied("Solo los coaches pueden crear bloques")
         bloque = serializer.save(coach=self.request.user)
 
-        # 🚀 Enviar notificación push solo al atleta correspondiente
         athlete = bloque.athlete
         if athlete:
             tokens = PushToken.objects.filter(user=athlete)
@@ -59,12 +55,26 @@ class TrainingSessionViewSet(viewsets.ModelViewSet):
     serializer_class = TrainingSessionSerializer
     permission_classes = [permissions.IsAuthenticated]
     filter_backends = [DjangoFilterBackend]
-    filterset_fields = ["block"]  # ahora permite ?block=<id>
+    filterset_fields = ["block"]  # permite ?block=<id>
 
     def perform_create(self, serializer):
-        if self.request.user.role != "coach":
+        user = self.request.user
+
+        if user.role != "coach":
             raise PermissionDenied("Solo los coaches pueden crear sesiones")
-        serializer.save()
+
+        block = serializer.validated_data.get("block")
+
+        if not block:
+            raise ValidationError({"detail": "Debes indicar un bloque válido."})
+        
+        athlete = block.athlete
+
+        if not athlete:
+            raise ValidationError({"detail": "El bloque no tiene un atleta asignado."})
+
+        # Guardamos la sesión asociada al bloque y al atleta
+        serializer.save(block=block, athlete=athlete)
 
     def get_queryset(self):
         user = self.request.user
@@ -73,7 +83,7 @@ class TrainingSessionViewSet(viewsets.ModelViewSet):
             return TrainingSession.objects.filter(block__coach=user)
 
         if user.role == "athlete":
-            return TrainingSession.objects.filter(block__athlete=user)
+            return TrainingSession.objects.filter(athlete=user)
 
         if user.role == "admin":
             return TrainingSession.objects.all()

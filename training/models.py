@@ -34,7 +34,6 @@ class TrainingBlock(models.Model):
         serializer.save(created_by=self.request.user)
 
 
-
 class TrainingSession(models.Model):
     STATUS_CHOICES = [
         ("pending", "Pendiente"),
@@ -44,6 +43,7 @@ class TrainingSession(models.Model):
     block = models.ForeignKey(TrainingBlock, on_delete=models.CASCADE, related_name="sessions")
     date = models.DateField()
     notes = models.TextField(blank=True, null=True)
+    athlete = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name="sessions", null=True, blank=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="pending")
 
 
