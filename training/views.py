@@ -150,7 +150,7 @@ class AthleteProgressViewSet(viewsets.ModelViewSet):
         return AthleteProgress.objects.none()
 
     @action(detail=False, methods=["get"])
-    def strength_progress(self, request):
+    def week_progress(self, request):
         """Devuelve la evolución semanal del 1RM promedio por ejercicio."""
         athlete = request.user
 
@@ -318,12 +318,12 @@ class AthleteProgressViewSet(viewsets.ModelViewSet):
             "progress": structured
         })
 
-    
+
     @action(detail=False, methods=["get"])
     def strength_chart(self, request):
         """
-        Devuelve un gráfico del progreso (estimación de 1RM) por bloque.
-        Usa el parámetro ?block=<id>
+        Devuelve los datos listos para graficar la evolución del 1RM estimado por ejercicio
+        dentro de un bloque específico (para React Native con react-native-chart-kit).
         """
         athlete = request.user
         block_id = request.query_params.get("block")
@@ -334,59 +334,102 @@ class AthleteProgressViewSet(viewsets.ModelViewSet):
         if not block_id:
             return Response({"detail": "Debes indicar el parámetro ?block=<id>."}, status=400)
 
-        # Buscar el bloque y validar que pertenezca al atleta
+        # Validar bloque
         try:
             block = TrainingBlock.objects.get(id=block_id, athlete=athlete)
         except TrainingBlock.DoesNotExist:
             return Response({"detail": "Bloque no encontrado."}, status=404)
 
-        # Filtrar los progresos del atleta dentro del rango del bloque
+        # Tabla RPE
+        rpe_table = {
+            10: [1.00, 0.95, 0.92, 0.89, 0.86, 0.84, 0.81, 0.79],
+            9.5: [0.98, 0.94, 0.90, 0.87, 0.84, 0.81, 0.79, 0.76],
+            9: [0.96, 0.92, 0.89, 0.86, 0.81, 0.79, 0.76, 0.74],
+            8.5: [0.94, 0.90, 0.87, 0.84, 0.79, 0.76, 0.74, 0.71],
+            8: [0.92, 0.89, 0.86, 0.81, 0.79, 0.76, 0.74, 0.71],
+            7.5: [0.91, 0.87, 0.84, 0.79, 0.76, 0.74, 0.71, 0.69],
+            7: [0.89, 0.86, 0.84, 0.79, 0.74, 0.71, 0.69, 0.67],
+            6.5: [0.86, 0.84, 0.81, 0.76, 0.71, 0.69, 0.67, 0.64],
+            6: [0.84, 0.81, 0.79, 0.74, 0.69, 0.67, 0.64, 0.62],
+            5: [0.81, 0.79, 0.76, 0.71, 0.67, 0.64, 0.62, 0.59],
+            4: [0.79, 0.76, 0.74, 0.69, 0.64, 0.62, 0.59, 0.57],
+        }
+
+        # Obtener ejercicios del bloque
+        exercises = Exercise.objects.filter(
+            session__block=block,
+            session__block__athlete=athlete,
+            name__in=[choice[0] for choice in AthleteProgress.ExerciseChoices.choices]
+        )
+
+        # Calcular y registrar 1RM estimado
+        for ex in exercises:
+            if not ex.rpe_actual or not ex.reps or not ex.weight_actual:
+                continue
+
+            reps_index = min(ex.reps, 8) - 1  # evitar índices fuera de rango
+            percentage = rpe_table.get(float(ex.rpe_actual), [1] * 8)[reps_index]
+            estimated_1rm = ex.weight_actual / percentage if percentage else ex.weight_actual
+
+            existing = AthleteProgress.objects.filter(
+                athlete=athlete,
+                exercise=ex.name,
+                date=ex.session.date
+            )
+
+            if existing.exists():
+                existing.update(
+                    best_weight=ex.weight_actual,
+                    estimated_1rm=estimated_1rm
+                )
+            else:
+                AthleteProgress.objects.create(
+                    athlete=athlete,
+                    exercise=ex.name,
+                    date=ex.session.date,
+                    best_weight=ex.weight_actual,
+                    estimated_1rm=estimated_1rm
+                )
+
+        # Obtener progreso dentro del bloque
         progress_qs = AthleteProgress.objects.filter(
             athlete=athlete,
             date__range=[block.start_date, block.end_date]
         )
 
         if not progress_qs.exists():
-            return Response({"detail": "No hay registros de progreso en este bloque."}, status=404)
+            return Response({"detail": "No hay progresos en este bloque."}, status=404)
 
-        # Agrupar por fecha y ejercicio para mostrar evolución dentro del bloque
         progress_data = (
             progress_qs.values("date", "exercise")
             .annotate(avg_est_1rm=Avg("estimated_1rm"))
             .order_by("date")
         )
 
-        # Estructurar datos por ejercicio
         exercises = [choice[0] for choice in AthleteProgress.ExerciseChoices.choices]
-        dates = sorted(set([str(p["date"]) for p in progress_data]))
+        dates = sorted(set(str(p["date"]) for p in progress_data))
 
-        plt.figure(figsize=(8, 5))
+        chart_data = {
+            "labels": dates,
+            "datasets": []
+        }
+
         for ex in exercises:
-            y = [
-                next((p["avg_est_1rm"] for p in progress_data if str(p["date"]) == d and p["exercise"] == ex), None)
+            y_values = [
+                next(
+                    (p["avg_est_1rm"] for p in progress_data if str(p["date"]) == d and p["exercise"] == ex),
+                    0
+                )
                 for d in dates
             ]
-            plt.plot(dates, y, marker="o", label=ex)
+            chart_data["datasets"].append({
+                "label": ex,
+                "data": y_values
+            })
 
-        plt.title(f"Evolución del 1RM estimado - Bloque {block.name}")
-        plt.xlabel("Fecha")
-        plt.ylabel("1RM estimado (kg)")
-        plt.xticks(rotation=45)
-        plt.legend()
-        plt.grid(True)
-
-        # Convertir el gráfico a base64
-        buffer = io.BytesIO()
-        plt.savefig(buffer, format="png", bbox_inches="tight")
-        buffer.seek(0)
-        image_png = buffer.getvalue()
-        buffer.close()
-        plt.close()
-
-        graphic = base64.b64encode(image_png).decode("utf-8")
-        return JsonResponse({
+        return Response({
             "block": block.name,
             "start_date": str(block.start_date),
             "end_date": str(block.end_date),
-            "chart": graphic
+            "chart_data": chart_data
         })
