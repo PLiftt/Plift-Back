@@ -443,45 +443,80 @@ class AthleteProgressViewSet(viewsets.ModelViewSet):
     
     @action(detail=False, methods=["get"])
     def progress_report(self, request):
-        user = request.user
-        if user.role != "coach":
-            return Response({"detail": "Solo coaches pueden ver reportes"}, status=403)
+     """
+     Vista para coaches: muestra un gráfico por bloque, con la evolución del 1RM estimado
+     igual que la vista del atleta (strength_chart).
+     """
+     user = request.user
+     if user.role != "coach":
+         return Response({"detail": "Solo coaches pueden ver reportes"}, status=403)
 
-        athlete_id = request.query_params.get("athlete")
-        if not athlete_id:
-            return Response({"detail": "Debes indicar el ID del atleta con ?athlete=<id>."}, status=400)
+     athlete_id = request.query_params.get("athlete")
+     if not athlete_id:
+         return Response({"detail": "Debes indicar el ID del atleta con ?athlete=<id>."}, status=400)
 
-        try:
-            athlete = User.objects.get(id=int(athlete_id), role="athlete")
-        except User.DoesNotExist:
-            return Response({"detail": "Atleta no encontrado"}, status=404)
+     try:
+         athlete = User.objects.get(id=int(athlete_id), role="athlete")
+     except User.DoesNotExist:
+         return Response({"detail": "Atleta no encontrado"}, status=404)
 
-        # Verificar asignación
-        if not user.athletes.filter(athlete=athlete).exists():
-            return Response({"detail": "No tienes permiso para ver este atleta"}, status=403)
+     # Verificar asignación del coach
+     if not user.athletes.filter(athlete=athlete).exists():
+         return Response({"detail": "No tienes permiso para ver este atleta"}, status=403)
 
-        blocks = TrainingBlock.objects.filter(athlete=athlete, coach=user).order_by("start_date")
-        if not blocks.exists():
-            return Response({"detail": "No hay bloques para este atleta"}, status=404)
+     # Obtener bloques del atleta
+     blocks = TrainingBlock.objects.filter(athlete=athlete, coach=user).order_by("start_date")
+     if not blocks.exists():
+         return Response({"detail": "No hay bloques para este atleta"}, status=404)
 
-        # --- Construcción del reporte para gráfico ---
-        block_labels = [block.name for block in blocks]
-        exercise_names = ["Sentadilla", "Press Banca", "Peso Muerto"]
+     # Nombres válidos de ejercicios definidos en AthleteProgress
+     exercise_choices = [choice[0] for choice in AthleteProgress.ExerciseChoices.choices]
 
-        datasets = []
-        for exercise in exercise_names:
-            data_points = []
-            for block in blocks:
-                progress = AthleteProgress.objects.filter(
-                    athlete=athlete,
-                    exercise__icontains=exercise,
-                    date__range=[block.start_date, block.end_date]
-                ).aggregate(max_weight=Max("best_weight"))
-                data_points.append(float(progress["max_weight"] or 0))
-            datasets.append({"label": exercise, "data": data_points})
+     block_reports = []
 
-        return Response({
-            "athlete": f"{athlete.first_name} {athlete.last_name}",
-            "labels": block_labels,
-            "datasets": datasets,
-        })
+     for block in blocks:
+         # Buscar progresos dentro del rango del bloque
+         progress_qs = AthleteProgress.objects.filter(
+             athlete=athlete,
+             date__range=[block.start_date, block.end_date]
+         )
+
+         if not progress_qs.exists():
+             continue
+
+         # Agrupar promedios de 1RM estimado por fecha y ejercicio
+         progress_data = (
+             progress_qs.values("date", "exercise")
+             .annotate(avg_est_1rm=Avg("estimated_1rm"))
+             .order_by("date")
+         )
+
+         # Generar lista de fechas únicas
+         dates = sorted(set(str(p["date"]) for p in progress_data))
+
+         # Crear estructura de gráfico igual que strength_chart
+         chart_data = {"labels": dates, "datasets": []}
+         for ex in exercise_choices:
+             y_values = [
+                 next(
+                     (p["avg_est_1rm"] for p in progress_data if str(p["date"]) == d and p["exercise"] == ex),
+                     0,
+                 )
+                 for d in dates
+             ]
+             chart_data["datasets"].append({
+                 "label": ex,
+                 "data": y_values,
+             })
+
+         block_reports.append({
+             "block_name": block.name,
+             "start_date": str(block.start_date),
+             "end_date": str(block.end_date),
+             "chart_data": chart_data,
+         })
+
+     if not block_reports:
+         return Response({"detail": "No hay progresos registrados para este atleta."}, status=404)
+
+     return Response(block_reports)
