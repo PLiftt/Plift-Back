@@ -2,7 +2,7 @@ from rest_framework import viewsets, permissions, status
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
-from .models import TrainingBlock, TrainingSession, Exercise, AthleteProgress
+from .models import TrainingBlock, TrainingSession, Exercise, AthleteProgress, CustomUser as User
 from .serializers import TrainingBlockSerializer, TrainingSessionSerializer, ExerciseSerializer, AthleteProgressSerializer
 from django_filters.rest_framework import DjangoFilterBackend
 from notification.models import PushToken
@@ -12,6 +12,8 @@ from django.db.models.functions import TruncWeek
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.exceptions import ValidationError
 from datetime import date
+from django.db.models import Avg, Max
+
 
 class TrainingBlockViewSet(viewsets.ModelViewSet):
     queryset = TrainingBlock.objects.all()
@@ -436,4 +438,50 @@ class AthleteProgressViewSet(viewsets.ModelViewSet):
             "start_date": str(block.start_date),
             "end_date": str(block.end_date),
             "chart_data": chart_data
+        })
+    
+    
+    @action(detail=False, methods=["get"])
+    def progress_report(self, request):
+        user = request.user
+        if user.role != "coach":
+            return Response({"detail": "Solo coaches pueden ver reportes"}, status=403)
+
+        athlete_id = request.query_params.get("athlete")
+        if not athlete_id:
+            return Response({"detail": "Debes indicar el ID del atleta con ?athlete=<id>."}, status=400)
+
+        try:
+            athlete = User.objects.get(id=int(athlete_id), role="athlete")
+        except User.DoesNotExist:
+            return Response({"detail": "Atleta no encontrado"}, status=404)
+
+        # Verificar asignación
+        if not user.athletes.filter(athlete=athlete).exists():
+            return Response({"detail": "No tienes permiso para ver este atleta"}, status=403)
+
+        blocks = TrainingBlock.objects.filter(athlete=athlete, coach=user).order_by("start_date")
+        if not blocks.exists():
+            return Response({"detail": "No hay bloques para este atleta"}, status=404)
+
+        # --- Construcción del reporte para gráfico ---
+        block_labels = [block.name for block in blocks]
+        exercise_names = ["Sentadilla", "Press Banca", "Peso Muerto"]
+
+        datasets = []
+        for exercise in exercise_names:
+            data_points = []
+            for block in blocks:
+                progress = AthleteProgress.objects.filter(
+                    athlete=athlete,
+                    exercise__icontains=exercise,
+                    date__range=[block.start_date, block.end_date]
+                ).aggregate(max_weight=Max("best_weight"))
+                data_points.append(float(progress["max_weight"] or 0))
+            datasets.append({"label": exercise, "data": data_points})
+
+        return Response({
+            "athlete": f"{athlete.first_name} {athlete.last_name}",
+            "labels": block_labels,
+            "datasets": datasets,
         })
