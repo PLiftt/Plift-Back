@@ -3,7 +3,7 @@ from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
 from .models import TrainingBlock, TrainingSession, Exercise, AthleteProgress, CustomUser as User
-from .serializers import TrainingBlockSerializer, TrainingSessionSerializer, ExerciseSerializer, AthleteProgressSerializer
+from .serializers import TrainingBlockSerializer, TrainingSessionSerializer, ExerciseSerializer, AthleteProgressSerializer, EXERCISE_CHOICES
 from django_filters.rest_framework import DjangoFilterBackend
 from notification.models import PushToken
 from notification.utils import send_push_notification
@@ -161,117 +161,117 @@ class AthleteProgressViewSet(viewsets.ModelViewSet):
             return AthleteProgress.objects.all()
         return AthleteProgress.objects.none()
 
-    @action(detail=False, methods=["get"])
-    def week_progress(self, request):
-        """Devuelve la evolución semanal del 1RM promedio por ejercicio."""
-        athlete = request.user
+    # @action(detail=False, methods=["get"])
+    # def week_progress(self, request):
+    #     """Devuelve la evolución semanal del 1RM promedio por ejercicio."""
+    #     athlete = request.user
 
-        if athlete.role != "athlete":
-            return Response({"detail": "Solo atletas pueden ver su progreso."}, status=403)
+    #     if athlete.role != "athlete":
+    #         return Response({"detail": "Solo atletas pueden ver su progreso."}, status=403)
         
-        rpe_table = {
-            10:  [1.00, 0.95, 0.92, 0.89, 0.86, 0.84, 0.81, 0.79],
-            9.5: [0.98, 0.94, 0.90, 0.87, 0.84, 0.81, 0.79, 0.76],
-            9:   [0.96, 0.92, 0.89, 0.86, 0.81, 0.79, 0.76, 0.74],
-            8.5: [0.94, 0.90, 0.87, 0.84, 0.79, 0.76, 0.74, 0.71],
-            8:   [0.92, 0.89, 0.86, 0.81, 0.79, 0.76, 0.74, 0.71],
-            7.5: [0.91, 0.87, 0.84, 0.79, 0.76, 0.74, 0.71, 0.69],
-            7:   [0.89, 0.86, 0.84, 0.79, 0.74, 0.71, 0.69, 0.67],
-            6.5: [0.86, 0.84, 0.81, 0.76, 0.71, 0.69, 0.67, 0.64],
-            6:   [0.84, 0.81, 0.79, 0.74, 0.69, 0.67, 0.64, 0.62],
-            5:   [0.81, 0.79, 0.76, 0.71, 0.67, 0.64, 0.62, 0.59],
-            4:   [0.79, 0.76, 0.74, 0.69, 0.64, 0.62, 0.59, 0.57],
-        }
+    #     rpe_table = {
+    #         10:  [1.00, 0.95, 0.92, 0.89, 0.86, 0.84, 0.81, 0.79],
+    #         9.5: [0.98, 0.94, 0.90, 0.87, 0.84, 0.81, 0.79, 0.76],
+    #         9:   [0.96, 0.92, 0.89, 0.86, 0.81, 0.79, 0.76, 0.74],
+    #         8.5: [0.94, 0.90, 0.87, 0.84, 0.79, 0.76, 0.74, 0.71],
+    #         8:   [0.92, 0.89, 0.86, 0.81, 0.79, 0.76, 0.74, 0.71],
+    #         7.5: [0.91, 0.87, 0.84, 0.79, 0.76, 0.74, 0.71, 0.69],
+    #         7:   [0.89, 0.86, 0.84, 0.79, 0.74, 0.71, 0.69, 0.67],
+    #         6.5: [0.86, 0.84, 0.81, 0.76, 0.71, 0.69, 0.67, 0.64],
+    #         6:   [0.84, 0.81, 0.79, 0.74, 0.69, 0.67, 0.64, 0.62],
+    #         5:   [0.81, 0.79, 0.76, 0.71, 0.67, 0.64, 0.62, 0.59],
+    #         4:   [0.79, 0.76, 0.74, 0.69, 0.64, 0.62, 0.59, 0.57],
+    #     }
         
-        week = date.today().isocalendar()[1]
+    #     week = date.today().isocalendar()[1]
 
-        bench_progress, _ = AthleteProgress.objects.get_or_create(
-            athlete=athlete,
-            exercise=AthleteProgress.ExerciseChoices.BENCH,
-            date__week=week,
-            defaults={"best_weight": 0, "estimated_1rm": 0},
-        )
+    #     bench_progress, _ = AthleteProgress.objects.get_or_create(
+    #         athlete=athlete,
+    #         exercise=AthleteProgress.ExerciseChoices.BENCH,
+    #         date__week=week,
+    #         defaults={"best_weight": 0, "estimated_1rm": 0},
+    #     )
 
-        last_bench_press = Exercise.objects.filter(
-            name=AthleteProgress.ExerciseChoices.BENCH,
-            session__block__athlete=athlete,
-            session__date__week=week,
-        ).first()
+    #     last_bench_press = Exercise.objects.filter(
+    #         name=AthleteProgress.ExerciseChoices.BENCH,
+    #         session__block__athlete=athlete,
+    #         session__date__week=week,
+    #     ).first()
 
-        if last_bench_press:
-            percentage = rpe_table[last_bench_press.rpe_actual][last_bench_press.reps - 1]
-            bench_progress.best_weight = last_bench_press.weight_actual
-            bench_progress.estimated_1rm = bench_progress.best_weight / percentage
-            bench_progress.save()
+    #     if last_bench_press:
+    #         percentage = rpe_table[last_bench_press.rpe_actual][last_bench_press.reps - 1]
+    #         bench_progress.best_weight = last_bench_press.weight_actual
+    #         bench_progress.estimated_1rm = bench_progress.best_weight / percentage
+    #         bench_progress.save()
 
-        squat_progress, _ = AthleteProgress.objects.get_or_create(
-            athlete=athlete,
-            exercise=AthleteProgress.ExerciseChoices.SQUAT,
-            date__week=week,
-            defaults={"best_weight": 0, "estimated_1rm": 0},
-        )
+    #     squat_progress, _ = AthleteProgress.objects.get_or_create(
+    #         athlete=athlete,
+    #         exercise=AthleteProgress.ExerciseChoices.SQUAT,
+    #         date__week=week,
+    #         defaults={"best_weight": 0, "estimated_1rm": 0},
+    #     )
 
-        last_squat = Exercise.objects.filter(
-            name=AthleteProgress.ExerciseChoices.SQUAT,
-            session__block__athlete=athlete,
-            session__date__week=week,
-        ).first()
+    #     last_squat = Exercise.objects.filter(
+    #         name=AthleteProgress.ExerciseChoices.SQUAT,
+    #         session__block__athlete=athlete,
+    #         session__date__week=week,
+    #     ).first()
 
-        if last_squat:
-            percentage = rpe_table[last_squat.rpe_actual][last_squat.reps - 1]
-            squat_progress.best_weight = last_squat.weight
-            squat_progress.estimated_1rm = squat_progress.best_weight / percentage
-            squat_progress.save()
+    #     if last_squat:
+    #         percentage = rpe_table[last_squat.rpe_actual][last_squat.reps - 1]
+    #         squat_progress.best_weight = last_squat.weight
+    #         squat_progress.estimated_1rm = squat_progress.best_weight / percentage
+    #         squat_progress.save()
 
-        deadlift_progress, _ = AthleteProgress.objects.get_or_create(
-            athlete=athlete,
-            exercise=AthleteProgress.ExerciseChoices.DEADLIFT,
-            date__week=week,
-            defaults={"best_weight": 0, "estimated_1rm": 0},
-        )
+    #     deadlift_progress, _ = AthleteProgress.objects.get_or_create(
+    #         athlete=athlete,
+    #         exercise=AthleteProgress.ExerciseChoices.DEADLIFT,
+    #         date__week=week,
+    #         defaults={"best_weight": 0, "estimated_1rm": 0},
+    #     )
 
-        last_deadlift = Exercise.objects.filter(
-            name=AthleteProgress.ExerciseChoices.DEADLIFT,
-            session__block__athlete=athlete,
-            session__date__week=week,
-        ).first()
+    #     last_deadlift = Exercise.objects.filter(
+    #         name=AthleteProgress.ExerciseChoices.DEADLIFT,
+    #         session__block__athlete=athlete,
+    #         session__date__week=week,
+    #     ).first()
 
-        if last_deadlift:
-            percentage = rpe_table[last_deadlift.rpe_actual][last_deadlift.reps - 1]
-            deadlift_progress.best_weight = last_deadlift.weight
-            deadlift_progress.estimated_1rm = deadlift_progress.best_weight / percentage
-            deadlift_progress.save()
+    #     if last_deadlift:
+    #         percentage = rpe_table[last_deadlift.rpe_actual][last_deadlift.reps - 1]
+    #         deadlift_progress.best_weight = last_deadlift.weight
+    #         deadlift_progress.estimated_1rm = deadlift_progress.best_weight / percentage
+    #         deadlift_progress.save()
 
-        progress_data = (
-            AthleteProgress.objects.filter(athlete=athlete)
-            .annotate(week=TruncWeek("date"))
-            .values("exercise", "week")
-            .annotate(
-                avg_best_weight=Avg("best_weight"),
-                avg_est_1rm=Avg("estimated_1rm"),
-            )
-            .order_by("week")
-        )
+    #     progress_data = (
+    #         AthleteProgress.objects.filter(athlete=athlete)
+    #         .annotate(week=TruncWeek("date"))
+    #         .values("exercise", "week")
+    #         .annotate(
+    #             avg_best_weight=Avg("best_weight"),
+    #             avg_est_1rm=Avg("estimated_1rm"),
+    #         )
+    #         .order_by("week")
+    #     )
 
-        # Reorganiza los datos por semana → {week: {Sentadilla: x, Press Banca: y, Peso Muerto: z}}
-        structured = {}
-        for entry in progress_data:
-            week = entry["week"].strftime("%Y-%m-%d")
-            exercise = entry["exercise"]
-            if week not in structured:
-                structured[week] = {}
-            structured[week][exercise] = {
-                "avg_best_weight": entry["avg_best_weight"],
-                "avg_est_1rm": entry["avg_est_1rm"],
-            }
+    #     # Reorganiza los datos por semana → {week: {Sentadilla: x, Press Banca: y, Peso Muerto: z}}
+    #     structured = {}
+    #     for entry in progress_data:
+    #         week = entry["week"].strftime("%Y-%m-%d")
+    #         exercise = entry["exercise"]
+    #         if week not in structured:
+    #             structured[week] = {}
+    #         structured[week][exercise] = {
+    #             "avg_best_weight": entry["avg_best_weight"],
+    #             "avg_est_1rm": entry["avg_est_1rm"],
+    #         }
 
-        # Rellena con ejercicios faltantes (para que siempre haya los 3)
-        all_exercises = [choice[0] for choice in AthleteProgress.ExerciseChoices.choices]
-        for week, data in structured.items():
-            for ex in all_exercises:
-                data.setdefault(ex, {"avg_best_weight": None, "avg_est_1rm": None})
+    #     # Rellena con ejercicios faltantes (para que siempre haya los 3)
+    #     all_exercises = [choice[0] for choice in AthleteProgress.ExerciseChoices.choices]
+    #     for week, data in structured.items():
+    #         for ex in all_exercises:
+    #             data.setdefault(ex, {"avg_best_weight": None, "avg_est_1rm": None})
 
-        return Response(structured)
+    #     return Response(structured)
     
     @action(detail=False, methods=["get"])
     def block_progress(self, request):
@@ -344,7 +344,7 @@ class AthleteProgressViewSet(viewsets.ModelViewSet):
 
         block = TrainingBlock.objects.filter(
             athlete=athlete
-        ).order_by("-start_date").first()
+        ).order_by("start_date").first()
 
         # Tabla RPE
         rpe_table = {
@@ -365,9 +365,8 @@ class AthleteProgressViewSet(viewsets.ModelViewSet):
         exercises = Exercise.objects.filter(
             session__block=block,
             session__block__athlete=athlete,
-            name__in=[choice[0] for choice in AthleteProgress.ExerciseChoices.choices]
+            name__in=[choice[0] for choice in EXERCISE_CHOICES[:3]],  # Solo los ejercicios relevantes
         )
-
         # Calcular y registrar 1RM estimado
         for ex in exercises:
             if not ex.rpe_actual or not ex.reps or not ex.weight_actual:
@@ -377,7 +376,7 @@ class AthleteProgressViewSet(viewsets.ModelViewSet):
             percentage = rpe_table.get(float(ex.rpe_actual), [1] * 8)[reps_index]
             estimated_1rm = ex.weight_actual / percentage if percentage else ex.weight_actual
 
-            existing = AthleteProgress.objects.filter(
+            existing = AthleteProgress.objects.filter(       
                 athlete=athlete,
                 exercise=ex.name,
                 date=ex.session.date
@@ -440,83 +439,77 @@ class AthleteProgressViewSet(viewsets.ModelViewSet):
             "chart_data": chart_data
         })
     
-    
+
     @action(detail=False, methods=["get"])
     def progress_report(self, request):
-     """
-     Vista para coaches: muestra un gráfico por bloque, con la evolución del 1RM estimado
-     igual que la vista del atleta (strength_chart).
-     """
-     user = request.user
-     if user.role != "coach":
-         return Response({"detail": "Solo coaches pueden ver reportes"}, status=403)
+        """
+        Vista para coaches: muestra la evolución del 1RM estimado
+        agrupado por bloque y ejercicio.
+        Incluye todos los bloques, incluso los sin progreso.
+        """
+        user = request.user
+        if user.role != "coach":
+            return Response({"detail": "Solo coaches pueden ver reportes"}, status=403)
 
-     athlete_id = request.query_params.get("athlete")
-     if not athlete_id:
-         return Response({"detail": "Debes indicar el ID del atleta con ?athlete=<id>."}, status=400)
+        athlete_id = request.query_params.get("athlete")
+        if not athlete_id:
+            return Response({"detail": "Debes indicar el ID del atleta con ?athlete=<id>."}, status=400)
 
-     try:
-         athlete = User.objects.get(id=int(athlete_id), role="athlete")
-     except User.DoesNotExist:
-         return Response({"detail": "Atleta no encontrado"}, status=404)
+        try:
+            athlete = User.objects.get(id=int(athlete_id), role="athlete")
+        except User.DoesNotExist:
+            return Response({"detail": "Atleta no encontrado"}, status=404)
 
-     # Verificar asignación del coach
-     if not user.athletes.filter(athlete=athlete).exists():
-         return Response({"detail": "No tienes permiso para ver este atleta"}, status=403)
+        # Verificar que el atleta esté asignado al coach
+        if not user.athletes.filter(athlete=athlete).exists():
+            return Response({"detail": "No tienes permiso para ver este atleta"}, status=403)
 
-     # Obtener bloques del atleta
-     blocks = TrainingBlock.objects.filter(athlete=athlete, coach=user).order_by("start_date")
-     if not blocks.exists():
-         return Response({"detail": "No hay bloques para este atleta"}, status=404)
+        # Obtener todos los bloques del atleta asignados al coach
+        blocks = TrainingBlock.objects.filter(athlete=athlete, coach=user).order_by("start_date")
+        if not blocks.exists():
+            return Response({"detail": "El atleta no tiene bloques asignados"}, status=404)
 
-     # Nombres válidos de ejercicios definidos en AthleteProgress
-     exercise_choices = [choice[0] for choice in AthleteProgress.ExerciseChoices.choices]
+        # Usar tu lista de ejercicios predeterminados
+        exercise_choices = [ex[0] for ex in EXERCISE_CHOICES[:3]]  
+        block_reports = []
 
-     block_reports = []
+        for block in blocks:
+            # Obtener progresos del bloque
+            progress_qs = AthleteProgress.objects.filter(athlete=athlete, block=block)
 
-     for block in blocks:
-         # Buscar progresos dentro del rango del bloque
-         progress_qs = AthleteProgress.objects.filter(
-             athlete=athlete,
-             date__range=[block.start_date, block.end_date]
-         )
+            # Agrupar por fecha y ejercicio
+            progress_data = (
+                progress_qs.values("date", "exercise")
+                .annotate(avg_est_1rm=Avg("estimated_1rm"))
+                .order_by("date")
+            )
 
-         if not progress_qs.exists():
-             continue
+            # Si no hay datos, mostrar igual el bloque vacío
+            dates = sorted(set(str(p["date"]) for p in progress_data)) if progress_data.exists() else []
 
-         # Agrupar promedios de 1RM estimado por fecha y ejercicio
-         progress_data = (
-             progress_qs.values("date", "exercise")
-             .annotate(avg_est_1rm=Avg("estimated_1rm"))
-             .order_by("date")
-         )
+            chart_data = {"labels": dates, "datasets": []}
 
-         # Generar lista de fechas únicas
-         dates = sorted(set(str(p["date"]) for p in progress_data))
+            for ex in exercise_choices:
+                y_values = [
+                    next(
+                        (p["avg_est_1rm"] for p in progress_data if str(p["date"]) == d and p["exercise"] == ex),
+                        0,
+                    )
+                    for d in dates
+                ]
+                chart_data["datasets"].append({
+                    "label": ex,
+                    "data": y_values,
+                })
 
-         # Crear estructura de gráfico igual que strength_chart
-         chart_data = {"labels": dates, "datasets": []}
-         for ex in exercise_choices:
-             y_values = [
-                 next(
-                     (p["avg_est_1rm"] for p in progress_data if str(p["date"]) == d and p["exercise"] == ex),
-                     0,
-                 )
-                 for d in dates
-             ]
-             chart_data["datasets"].append({
-                 "label": ex,
-                 "data": y_values,
-             })
+            block_reports.append({
+                "block": {
+                    "id": block.id,
+                    "name": block.name,
+                    "start_date": str(block.start_date),
+                    "end_date": str(block.end_date),
+                },
+                "chart_data": chart_data,
+            })
 
-         block_reports.append({
-             "block_name": block.name,
-             "start_date": str(block.start_date),
-             "end_date": str(block.end_date),
-             "chart_data": chart_data,
-         })
-
-     if not block_reports:
-         return Response({"detail": "No hay progresos registrados para este atleta."}, status=404)
-
-     return Response(block_reports)
+        return Response(block_reports)
