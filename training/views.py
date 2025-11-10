@@ -336,108 +336,170 @@ class AthleteProgressViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=["get"])
     def strength_chart(self, request):
         """
-        Devuelve los datos listos para graficar la evolución del 1RM estimado por ejercicio
-        dentro de un bloque específico, agrupado por semana.
+        Devuelve la evolución del 1RM estimado:
+        - Para el coach: de todos los bloques de sus atletas.
+        - Para el atleta: solo el bloque más reciente.
         """
-        athlete = request.user
+        user = request.user
 
-        if athlete.role != "athlete":
-            return Response({"detail": "Solo los atletas pueden ver su progreso."}, status=403)
-
-        block = TrainingBlock.objects.filter(
-            athlete=athlete
-        ).order_by("start_date").first()
-
-        if not block:
-            return Response({"detail": "No se encontró ningún bloque activo."}, status=404)
-
-        # Tabla RPE
-        rpe_table = {
-            10: [1.00, 0.95, 0.92, 0.89, 0.86, 0.84, 0.81, 0.79],
-            9.5: [0.98, 0.94, 0.90, 0.87, 0.84, 0.81, 0.79, 0.76],
-            9: [0.96, 0.92, 0.89, 0.86, 0.81, 0.79, 0.76, 0.74],
-            8.5: [0.94, 0.90, 0.87, 0.84, 0.79, 0.76, 0.74, 0.71],
-            8: [0.92, 0.89, 0.86, 0.81, 0.79, 0.76, 0.74, 0.71],
-            7.5: [0.91, 0.87, 0.84, 0.79, 0.76, 0.74, 0.71, 0.69],
-            7: [0.89, 0.86, 0.84, 0.79, 0.74, 0.71, 0.69, 0.67],
-            6.5: [0.86, 0.84, 0.81, 0.76, 0.71, 0.69, 0.67, 0.64],
-            6: [0.84, 0.81, 0.79, 0.74, 0.69, 0.67, 0.64, 0.62],
-            5: [0.81, 0.79, 0.76, 0.71, 0.67, 0.64, 0.62, 0.59],
-            4: [0.79, 0.76, 0.74, 0.69, 0.64, 0.62, 0.59, 0.57],
-        }
-
-        exercises = Exercise.objects.filter(
-            session__block=block,
-            session__block__athlete=athlete,
-            name__in=[choice[0] for choice in EXERCISE_CHOICES[:3]],
-        )
-
-        # Calcular y registrar 1RM estimado
-        for ex in exercises:
-            if not ex.rpe_actual or not ex.reps or not ex.weight_actual:
-                continue
-
-            reps_index = min(ex.reps, 8) - 1
-            percentage = rpe_table.get(float(ex.rpe_actual), [1] * 8)[reps_index]
-            estimated_1rm = ex.weight_actual / percentage if percentage else ex.weight_actual
-
-            existing = AthleteProgress.objects.filter(
-                athlete=athlete,
-                exercise=ex.name,
-                date=ex.session.date
+        # === Si el usuario es un atleta ===
+        if user.role == "athlete":
+            latest_block = (
+                TrainingBlock.objects.filter(athlete=user)
+                .order_by("-start_date")
+                .first()
             )
+            if not latest_block:
+                return Response({"detail": "No tienes bloques registrados."}, status=404)
 
-            if existing.exists():
-                existing.update(best_weight=ex.weight_actual, estimated_1rm=estimated_1rm)
-            else:
-                AthleteProgress.objects.create(
-                    athlete=athlete,
+            # --- Procesar solo el bloque más nuevo ---
+            rpe_table = {
+                10: [1.00, 0.95, 0.92, 0.89, 0.86, 0.84, 0.81, 0.79],
+                9.5: [0.98, 0.94, 0.90, 0.87, 0.84, 0.81, 0.79, 0.76],
+                9: [0.96, 0.92, 0.89, 0.86, 0.81, 0.79, 0.76, 0.74],
+                8.5: [0.94, 0.90, 0.87, 0.84, 0.79, 0.76, 0.74, 0.71],
+                8: [0.92, 0.89, 0.86, 0.81, 0.79, 0.76, 0.74, 0.71],
+                7.5: [0.91, 0.87, 0.84, 0.79, 0.76, 0.74, 0.71, 0.69],
+                7: [0.89, 0.86, 0.84, 0.79, 0.74, 0.71, 0.69, 0.67],
+            }
+
+            # Calcular progreso para el bloque más reciente
+            exercises = Exercise.objects.filter(session__block=latest_block)
+            for ex in exercises:
+                if not ex.rpe_actual or not ex.reps or not ex.weight_actual:
+                    continue
+                reps_index = min(ex.reps, 8) - 1
+                perc = rpe_table.get(float(ex.rpe_actual), [1] * 8)[reps_index]
+                est_1rm = ex.weight_actual / perc if perc else ex.weight_actual
+
+                AthleteProgress.objects.update_or_create(
+                    athlete=user,
+                    block=latest_block,
                     exercise=ex.name,
                     date=ex.session.date,
-                    best_weight=ex.weight_actual,
-                    estimated_1rm=estimated_1rm
+                    defaults={
+                        "best_weight": ex.weight_actual,
+                        "estimated_1rm": est_1rm,
+                    },
                 )
 
-        # Obtener progreso dentro del bloque
-        progress_qs = AthleteProgress.objects.filter(
-            athlete=athlete,
-            date__range=[block.start_date, block.end_date]
-        )
+            # Generar datos del gráfico
+            from math import ceil
+            progress_qs = AthleteProgress.objects.filter(
+                athlete=user, block=latest_block
+            )
+            progress_by_week = {}
+            for record in progress_qs:
+                week_number = ceil(
+                    (record.date - latest_block.start_date).days / 7
+                ) + 1
+                progress_by_week.setdefault((week_number, record.exercise), []).append(
+                    record.estimated_1rm
+                )
 
-        if not progress_qs.exists():
-            return Response({"detail": "No hay progresos en este bloque."}, status=404)
+            exercises_list = ["Sentadilla", "Bench Press", "Peso muerto"]
+            weeks = sorted(set(week for week, _ in progress_by_week.keys()))
+            chart_data = {"labels": [f"Semana {w}" for w in weeks], "datasets": []}
 
-        # Agrupar por semana
-        progress_by_week = {}
-        for record in progress_qs:
-            week_number = ((record.date - block.start_date).days // 7) + 1
-            key = (week_number, record.exercise)
-            progress_by_week.setdefault(key, []).append(record.estimated_1rm)
+            for ex_name in exercises_list:
+                y_values = []
+                for w in weeks:
+                    values = progress_by_week.get((w, ex_name), [])
+                    y_values.append(round(sum(values) / len(values), 2) if values else 0)
+                chart_data["datasets"].append({"label": ex_name, "data": y_values})
 
-        exercises = [choice[0] for choice in EXERCISE_CHOICES[:3]]
-        weeks = sorted(set(week for week, _ in progress_by_week.keys()))
-        chart_data = {"labels": [f"Semana {w}" for w in weeks], "datasets": []}
+            block_report = {
+                "block": {
+                    "id": latest_block.id,
+                    "name": latest_block.name,
+                    "start_date": str(latest_block.start_date),
+                    "end_date": str(latest_block.end_date),
+                },
+                "chart_data": chart_data,
+            }
 
-        for ex in exercises:
-            y_values = []
-            for w in weeks:
-                values = progress_by_week.get((w, ex), [])
-                y_values.append(round(sum(values) / len(values), 2) if values else 0)
-            chart_data["datasets"].append({"label": ex, "data": y_values})
+            return Response(block_report)
 
-        return Response({
-            "block": block.name,
-            "start_date": str(block.start_date),
-            "end_date": str(block.end_date),
-            "chart_data": chart_data
-        })
+        # === Si el usuario es coach ===
+        elif user.role == "coach":
+            athletes = user.athletes.all()
+            if not athletes.exists():
+                return Response({"detail": "No hay atletas asignados."}, status=404)
+
+            reports = []
+            for athlete in athletes:
+                blocks = TrainingBlock.objects.filter(athlete=athlete).order_by("start_date")
+                athlete_data = []
+                for block in blocks:
+                    progress_qs = AthleteProgress.objects.filter(
+                        athlete=athlete, block=block
+                    )
+                    if not progress_qs.exists():
+                        continue
+
+                    from math import ceil
+                    progress_by_week = {}
+                    for record in progress_qs:
+                        week_number = ceil(
+                            (record.date - block.start_date).days / 7
+                        ) + 1
+                        progress_by_week.setdefault(
+                            (week_number, record.exercise), []
+                        ).append(record.estimated_1rm)
+
+                    exercises_list = ["Sentadilla", "Bench Press", "Peso muerto"]
+                    weeks = sorted(set(week for week, _ in progress_by_week.keys()))
+                    chart_data = {
+                        "labels": [f"Semana {w}" for w in weeks],
+                        "datasets": [],
+                    }
+
+                    for ex_name in exercises_list:
+                        y_values = []
+                        for w in weeks:
+                            values = progress_by_week.get((w, ex_name), [])
+                            y_values.append(
+                                round(sum(values) / len(values), 2) if values else 0
+                            )
+                        chart_data["datasets"].append(
+                            {"label": ex_name, "data": y_values}
+                        )
+
+                    athlete_data.append(
+                        {
+                            "block": {
+                                "id": block.id,
+                                "name": block.name,
+                                "start_date": str(block.start_date),
+                                "end_date": str(block.end_date),
+                            },
+                            "chart_data": chart_data,
+                        }
+                    )
+
+                reports.append(
+                    {
+                        "athlete_id": athlete.id,
+                        "athlete_name": athlete.get_full_name() or athlete.email,
+                        "blocks": athlete_data,
+                    }
+                )
+
+            return Response(reports)
+
+        return Response({"detail": "Rol no válido."}, status=403)
+
+
+
+
+
 
 
     @action(detail=False, methods=["get"])
     def progress_report(self, request):
         """
         Vista para coaches: muestra la evolución semanal del 1RM estimado
-        por bloque y ejercicio.
+        por bloque y ejercicio, generando datos automáticamente si faltan.
         """
         user = request.user
         if user.role != "coach":
@@ -459,17 +521,46 @@ class AthleteProgressViewSet(viewsets.ModelViewSet):
         if not blocks.exists():
             return Response({"detail": "El atleta no tiene bloques asignados"}, status=404)
 
+        # === Generar/actualizar progresos automáticamente para todos los bloques ===
+        rpe_table = {
+            10: [1.00, 0.95, 0.92, 0.89, 0.86, 0.84, 0.81, 0.79],
+            9.5: [0.98, 0.94, 0.90, 0.87, 0.84, 0.81, 0.79, 0.76],
+            9: [0.96, 0.92, 0.89, 0.86, 0.81, 0.79, 0.76, 0.74],
+            8.5: [0.94, 0.90, 0.87, 0.84, 0.79, 0.76, 0.74, 0.71],
+            8: [0.92, 0.89, 0.86, 0.81, 0.79, 0.76, 0.74, 0.71],
+        }
+
+        for block in blocks:
+            exercises = Exercise.objects.filter(session__block=block, session__block__athlete=athlete)
+            for ex in exercises:
+                if not ex.rpe_actual or not ex.reps or not ex.weight_actual:
+                    continue
+                reps_index = min(ex.reps, 8) - 1
+                perc = rpe_table.get(float(ex.rpe_actual), [1]*8)[reps_index]
+                est_1rm = ex.weight_actual / perc if perc else ex.weight_actual
+
+                AthleteProgress.objects.update_or_create(
+                    athlete=athlete,
+                    block=block,
+                    exercise=ex.name,
+                    date=ex.session.date,
+                    defaults={
+                        "best_weight": ex.weight_actual,
+                        "estimated_1rm": est_1rm,
+                    },
+                )
+
+        # === Construir los gráficos ===
         exercise_choices = [ex[0] for ex in EXERCISE_CHOICES[:3]]
         block_reports = []
 
+        from math import ceil
         for block in blocks:
             progress_qs = AthleteProgress.objects.filter(athlete=athlete, block=block)
             progress_by_week = {}
-
             for record in progress_qs:
-                week_number = ((record.date - block.start_date).days // 7) + 1
-                key = (week_number, record.exercise)
-                progress_by_week.setdefault(key, []).append(record.estimated_1rm)
+                week_number = ceil((record.date - block.start_date).days / 7) + 1
+                progress_by_week.setdefault((week_number, record.exercise), []).append(record.estimated_1rm)
 
             weeks = sorted(set(week for week, _ in progress_by_week.keys()))
             chart_data = {"labels": [f"Semana {w}" for w in weeks], "datasets": []}
